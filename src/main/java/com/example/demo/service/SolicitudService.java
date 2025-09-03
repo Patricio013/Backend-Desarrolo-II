@@ -1,6 +1,8 @@
 package com.example.demo.service;
 
 import com.example.demo.client.SimulatedCotizacionClient;
+import com.example.demo.client.SimulatedSolicitudesClient;
+import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.entity.Calificacion;
 import com.example.demo.entity.Prestador;
@@ -16,103 +18,107 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
 public class SolicitudService {
 
+    private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
+
     private final PrestadorRepository prestadorRepository;
     private final SolicitudRepository solicitudRepository;
     private final SimulatedCotizacionClient cotizacionClient;
-    private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
+    private final SimulatedSolicitudesClient solicitudesClient;
 
     public SolicitudService(PrestadorRepository prestadorRepository,
                             SolicitudRepository solicitudRepository,
-                            SimulatedCotizacionClient cotizacionClient) {
+                            SimulatedCotizacionClient cotizacionClient,
+                            SimulatedSolicitudesClient solicitudesClient) {
         this.prestadorRepository = prestadorRepository;
         this.solicitudRepository = solicitudRepository;
         this.cotizacionClient = cotizacionClient;
+        this.solicitudesClient = solicitudesClient;
     }
 
-    // Crea 3 solicitudes para los 3 mejores prestadores del rubro (flujo alternativo)
+    /**
+     * Toma TODAS las solicitudes CREADAS, las pasa a COTIZANDO
+     * y envía invitación al Top-3 de prestadores por rubro.
+     * Si no hay candidatos, la solicitud se mantiene en CREADA.
+     */
     @Transactional
-    public List<Solicitud> crearSolicitudesParaTop3Prestadores(Long usuarioId,
-                                                               Long rubroId,
-                                                               Long servicioId,
-                                                               String descripcion) {
-        // Usar nativa para evitar problemas de mapeo en p.habilidades
+    public List<SolicitudTop3Resultado> procesarTodasLasCreadas() {
+        List<Solicitud> creadas = solicitudesClient.obtenerSolicitudesCreadas(); // o usar repo si preferís
+        log.info("Procesando {} solicitudes en estado CREADA", creadas.size());
+
+        return creadas.stream()
+                .map(this::procesarUnaSolicitud)
+                .collect(Collectors.toList());
+    }
+
+    // =======================
+    // Helpers privados
+    // =======================
+
+    private SolicitudTop3Resultado procesarUnaSolicitud(Solicitud solicitud) {
+        Long rubroId = Objects.requireNonNull(
+                solicitud.getCategoriaId(),
+                "categoriaId (rubro) requerido en solicitud " + solicitud.getId()
+        );
+
+        // Candidatos por rubro
         List<Prestador> candidatos = prestadorRepository.findByRubroIdNative(rubroId);
-        log.info("Candidatos encontrados para rubro {}: {}", rubroId, candidatos.size());
+
+        // Ranking por promedio de calificaciones DESC y Top-3
         List<Prestador> top3 = candidatos.stream()
                 .sorted(Comparator.comparingDouble(SolicitudService::promedioCalificaciones).reversed())
                 .limit(3)
                 .collect(Collectors.toList());
 
-        return top3.stream().map(p -> Solicitud.builder()
-                        .usuarioId(Objects.requireNonNull(usuarioId, "usuarioId requerido"))
-                        .servicioId(Objects.requireNonNull(servicioId, "servicioId requerido"))
-                        .categoriaId(Objects.requireNonNull(rubroId, "rubroId requerido"))
-                        .descripcion(descripcion)
-                        .estado(EstadoSolicitud.COTIZANDO)
-                        .prestadorAsignadoId(p.getId())
-                        .build())
-                .map(solicitudRepository::save)
-                .collect(Collectors.toList());
-    }
+        // Si no hay candidatos: NO cambiar estado, devolver vacío
+        if (top3.isEmpty()) {
+            log.warn("Sin candidatos para rubro {} (solicitud {}) — se mantiene en CREADA",
+                    rubroId, solicitud.getId());
 
-    // Flujo pedido: llega una solicitud en estado CREADA, se buscan top 3 y se envían invitaciones simuladas
-    @Transactional
-    public List<InvitacionCotizacionDTO> invitarTop3ParaCotizar(Long solicitudId) {
-        Solicitud solicitud = solicitudRepository.findById(solicitudId)
-                .orElseThrow(() -> new NoSuchElementException("Solicitud no encontrada: " + solicitudId));
-
-        if (solicitud.getEstado() != EstadoSolicitud.CREADA) {
-            throw new IllegalStateException("La solicitud debe estar en estado CREADA para invitar a cotizar");
+            SolicitudTop3Resultado out = new SolicitudTop3Resultado();
+            out.setSolicitudId(solicitud.getId());
+            out.setDescripcion(solicitud.getDescripcion());
+            out.setEstado(solicitud.getEstado().name()); // seguirá CREADA
+            out.setTop3(List.of());
+            return out;
         }
 
-        Long rubroId = Objects.requireNonNull(solicitud.getCategoriaId(), "categoriaId (rubro) requerido");
-
-        // Usar nativa para evitar problemas de mapeo en p.habilidades
-        List<Prestador> candidatos = prestadorRepository.findByRubroIdNative(rubroId);
-        log.info("Candidatos encontrados para rubro {} (solicitud {}): {}", rubroId, solicitudId, candidatos.size());
-        List<Prestador> top3 = candidatos.stream()
-                .sorted(Comparator.comparingDouble(SolicitudService::promedioCalificaciones).reversed())
-                .limit(3)
-                .collect(Collectors.toList());
-
-        // Actualizar estado a COTIZANDO al iniciar el proceso de invitación
+        // Con candidatos: cambiar a COTIZANDO y enviar invitaciones
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
 
-        // Enviar invitaciones simuladas
-        return top3.stream().map(p -> {
-            InvitacionCotizacionDTO dto = InvitacionCotizacionDTO.builder()
-                    .solicitudId(solicitud.getId())
-                    .rubroId(rubroId)
-                    .prestadorId(p.getId())
-                    .prestadorNombre(p.getNombre() + " " + p.getApellido())
-                    .mensaje("Invitación a cotizar la solicitud " + solicitud.getId())
-                    .timestamp(LocalDateTime.now())
-                    .enviado(false)
-                    .build();
-            boolean ok = cotizacionClient.enviarInvitacion(dto);
-            dto.setEnviado(ok);
-            return dto;
-        }).collect(Collectors.toList());
+        List<InvitacionCotizacionDTO> invitaciones = top3.stream()
+                .map(p -> buildInvitacionDTO(solicitud, rubroId, p))
+                .peek(dto -> dto.setEnviado(cotizacionClient.enviarInvitacion(dto)))
+                .collect(Collectors.toList());
+
+        SolicitudTop3Resultado out = new SolicitudTop3Resultado();
+        out.setSolicitudId(solicitud.getId());
+        out.setDescripcion(solicitud.getDescripcion());
+        out.setEstado(solicitud.getEstado().name()); // ahora COTIZANDO
+        out.setTop3(invitaciones);
+        return out;
     }
 
-    // Expuesto para el endpoint de debug
-    @Transactional(readOnly = true)
-    public List<Prestador> buscarPrestadoresPorRubro(Long rubroId) {
-        List<Prestador> lista = prestadorRepository.findByRubroIdNative(rubroId);
-        log.info("[DEBUG] findByRubroIdNative({}) -> {} prestadores", rubroId, lista.size());
-        return lista;
+    private static InvitacionCotizacionDTO buildInvitacionDTO(Solicitud s, Long rubroId, Prestador p) {
+        return InvitacionCotizacionDTO.builder()
+                .solicitudId(s.getId())
+                .rubroId(rubroId)
+                .prestadorId(p.getId())
+                .prestadorNombre(p.getNombre() + " " + p.getApellido())
+                .mensaje("Invitación a cotizar la solicitud " + s.getId())
+                .timestamp(LocalDateTime.now())
+                .enviado(false)
+                .build();
     }
 
     private static double promedioCalificaciones(Prestador p) {
-        List<com.example.demo.entity.Calificacion> cals = p.getCalificaciones();
+        List<Calificacion> cals = p.getCalificaciones();
         if (cals == null || cals.isEmpty()) return 0.0;
         return cals.stream()
                 .filter(c -> c.getPuntuacion() != null)

@@ -1,9 +1,9 @@
 package com.example.demo.controller;
 
-import com.example.demo.entity.Prestador;
-import com.example.demo.dto.InvitacionCotizacionDTO;
-import com.example.demo.entity.Solicitud;
 import com.example.demo.service.SolicitudService;
+import com.example.demo.dto.InvitacionCotizacionDTO;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,46 +13,34 @@ import java.util.List;
 @RequestMapping("/api/solicitudes")
 public class SolicitudController {
 
-    private final SolicitudService solicitudService;
+    @Autowired
+    private SolicitudService solicitudService;
 
-    public SolicitudController(SolicitudService solicitudService) {
-        this.solicitudService = solicitudService;
+    /**
+     * Procesa TODAS las solicitudes en estado CREADA:
+     * - Cambia a COTIZANDO
+     * - Invita al Top-3 de prestadores por rubro
+     */
+    @PostMapping("/invitar-top3")
+    public ResponseEntity<List<SolicitudTop3Resultado>> invitarTop3ParaTodasLasCreadas() {
+        List<SolicitudTop3Resultado> out = solicitudService.procesarTodasLasCreadas();
+        return ResponseEntity.ok(out);
     }
 
-    // Flujo anterior: crear 3 solicitudes (mantengo por compatibilidad)
-    @PostMapping("/cotizar/top3")
-    public ResponseEntity<List<Solicitud>> crearSolicitudesTop3(@RequestBody CrearCotizacionesRequest req) {
-        List<Solicitud> creadas = solicitudService.crearSolicitudesParaTop3Prestadores(
-                req.getUsuarioId(), req.getRubroId(), req.getServicioId(), req.getDescripcion()
-        );
-        return ResponseEntity.ok(creadas);
-    }
-
-    // Nuevo flujo: una solicitud CREADA -> invitar top 3 a cotizar (simulado)
-    @PostMapping("/{id}/invitar/top3")
-    public ResponseEntity<List<InvitacionCotizacionDTO>> invitarTop3(@PathVariable("id") Long solicitudId) {
-        return ResponseEntity.ok(solicitudService.invitarTop3ParaCotizar(solicitudId));
-    }
-
-    // Debug: listar candidatos por rubroId para verificar Postman vs DB
-    @GetMapping("/candidatos")
-    public ResponseEntity<List<Prestador>> listarCandidatosPorRubro(@RequestParam("rubroId") Long rubroId) {
-        return ResponseEntity.ok(solicitudService.buscarPrestadoresPorRubro(rubroId));
-    }
-
-    public static class CrearCotizacionesRequest {
-        private Long usuarioId;
-        private Long rubroId;
-        private Long servicioId;
+    // ===== respuesta por solicitud =====
+    public static class SolicitudTop3Resultado {
+        private Long solicitudId;
         private String descripcion;
+        private String estado; // COTIZANDO
+        private List<InvitacionCotizacionDTO> top3;
 
-        public Long getUsuarioId() { return usuarioId; }
-        public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
-        public Long getRubroId() { return rubroId; }
-        public void setRubroId(Long rubroId) { this.rubroId = rubroId; }
-        public Long getServicioId() { return servicioId; }
-        public void setServicioId(Long servicioId) { this.servicioId = servicioId; }
+        public Long getSolicitudId() { return solicitudId; }
+        public void setSolicitudId(Long solicitudId) { this.solicitudId = solicitudId; }
         public String getDescripcion() { return descripcion; }
         public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
+        public String getEstado() { return estado; }
+        public void setEstado(String estado) { this.estado = estado; }
+        public List<InvitacionCotizacionDTO> getTop3() { return top3; }
+        public void setTop3(List<InvitacionCotizacionDTO> top3) { this.top3 = top3; }
     }
 }
