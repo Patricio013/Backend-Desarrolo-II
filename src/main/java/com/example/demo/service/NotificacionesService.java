@@ -2,6 +2,8 @@
 
 // import com.example.demo.entity.Notificaciones;
 // import com.example.demo.repository.NotificacionesRepository;
+
+// import org.springframework.beans.factory.annotation.Autowired;
 // import org.springframework.stereotype.Service;
 
 // import java.util.List;
@@ -10,11 +12,8 @@
 // @Service
 // public class NotificacionesService {
 
-//     private final NotificacionesRepository notificacionesRepository;
-
-//     public NotificacionService(NotificacionesRepository notificacionesRepository) {
-//         this.notificacionesRepository = notificacionesRepository;
-//     }
+//     @Autowired
+//     private NotificacionesRepository notificacionesRepository;
 
 //     // Crear una notificación
 //     public Notificaciones crearNotificacion(Notificaciones notificacion) {

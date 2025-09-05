@@ -152,7 +152,7 @@ INSERT INTO solicitud (
   (1001, 1, 5001, 3, 'Pintar living y pasillo',          'CREADA', NULL, NULL, NOW(), NOW()),
   (1002, 2, 5002, 3, 'Pintura exterior de balcon',       'CREADA', NULL, NULL, NOW(), NOW()),
   (1003, 3, 5003, 2, 'Revision de cableado en cocina',   'CREADA', NULL, NULL, NOW(), NOW()),
-  (1004, 4, 5004, 1, 'Cambio de sanitario en bano',      'CREADA', NULL, NULL, NOW(), NOW())
+  (1004, 4, 5004, 1, 'Cambio de sanitario en bano',      'CREADA', NULL, 1, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- =========================
