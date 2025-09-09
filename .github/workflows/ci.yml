@@ -152,8 +152,8 @@ jobs:
         run: |
           mkdir -p out/k6
           for script in smoke stress soak spike; do
-            docker run --rm -e API_BASE=${API_BASE} \
-              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
+            docker run --rm -e API_BASE=${API_BASE} 
+              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 
               run /scripts/$script.js --summary-export=/out/$script.json || \
               echo '{"metrics":{}}' > out/k6/$script.json
           done
