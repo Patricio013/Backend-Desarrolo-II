@@ -61,7 +61,7 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: root
-      API_BASE: http://host.docker.internal:8080
+      API_BASE: http://localhost:8080
 
     steps:
       - uses: actions/checkout@v4
