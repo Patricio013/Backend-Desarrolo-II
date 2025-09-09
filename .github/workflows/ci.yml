@@ -23,7 +23,6 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      SPRING_PROFILES_ACTIVE: test
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: root
@@ -39,7 +38,7 @@ jobs:
           cache: maven
 
       - name: Maven test
-        run: mvn -B -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }} clean test
+        run: mvn -B clean test
 
   k6-load:
     name: k6 (smoke/stress/soak/spike)
@@ -59,11 +58,9 @@ jobs:
           --health-timeout=5s
           --health-retries=5
     env:
-      SPRING_PROFILES_ACTIVE: test
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: root
-      # importante: host.docker.internal para k6
       API_BASE: http://host.docker.internal:8080
 
     steps:
@@ -78,9 +75,9 @@ jobs:
 
       - name: Boot backend (background)
         run: |
-          nohup mvn -DskipTests -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }} spring-boot:run > backend.log 2>&1 &
+          nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
           echo "⏳ Esperando a que levante el backend..."
-          for i in {1..120}; do # hasta 4 minutos
+          for i in {1..120}; do
             if curl -sf http://localhost:8080/actuator/health > /dev/null; then 
               echo "✅ Backend UP"
               break
@@ -92,7 +89,6 @@ jobs:
       - name: Prepare k6 scripts
         run: |
           mkdir -p tests/k6 out/k6
-          # ejemplo 1 (smoke)
           cat > tests/k6/smoke.js <<'JS'
           import http from 'k6/http';
           import { check, sleep } from 'k6';
@@ -104,7 +100,7 @@ jobs:
             sleep(1);
           }
           JS
-          # (dejar los otros stress/soak/spike como ya los tenías)
+          # agregar stress.js, soak.js y spike.js igual que antes
 
       - name: Run k6 (Docker)
         run: |
