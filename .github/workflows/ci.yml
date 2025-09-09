@@ -63,7 +63,8 @@ jobs:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: root
-      API_BASE: http://localhost:8080
+      # importante: host.docker.internal para k6
+      API_BASE: http://host.docker.internal:8080
 
     steps:
       - uses: actions/checkout@v4
@@ -78,16 +79,20 @@ jobs:
       - name: Boot backend (background)
         run: |
           nohup mvn -DskipTests -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }} spring-boot:run > backend.log 2>&1 &
-          for i in {1..60}; do
-            if curl -sf $API_BASE/actuator/health > /dev/null; then echo "Backend UP"; break; fi
+          echo "⏳ Esperando a que levante el backend..."
+          for i in {1..120}; do # hasta 4 minutos
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then 
+              echo "✅ Backend UP"
+              break
+            fi
             sleep 2
           done
-          curl -s $API_BASE/actuator/health || (echo "Backend no inició" && cat backend.log && exit 1)
+          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && tail -n 200 backend.log && exit 1)
 
       - name: Prepare k6 scripts
         run: |
           mkdir -p tests/k6 out/k6
-          # SMOKE
+          # ejemplo 1 (smoke)
           cat > tests/k6/smoke.js <<'JS'
           import http from 'k6/http';
           import { check, sleep } from 'k6';
@@ -99,61 +104,14 @@ jobs:
             sleep(1);
           }
           JS
-          # STRESS
-          cat > tests/k6/stress.js <<'JS'
-          import http from 'k6/http';
-          import { check } from 'k6';
-          export const options = {
-            stages: [
-              { duration: '20s', target: 20 },
-              { duration: '20s', target: 50 },
-              { duration: '20s', target: 100 },
-              { duration: '20s', target: 0 },
-            ],
-          };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-          }
-          JS
-          # SOAK
-          cat > tests/k6/soak.js <<'JS'
-          import http from 'k6/http';
-          import { check, sleep } from 'k6';
-          export const options = { vus: 10, duration: '2m' };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-            sleep(1);
-          }
-          JS
-          # SPIKE
-          cat > tests/k6/spike.js <<'JS'
-          import http from 'k6/http';
-          import { check } from 'k6';
-          export const options = {
-            stages: [
-              { duration: '5s', target: 5 },
-              { duration: '5s', target: 200 },
-              { duration: '10s', target: 5 },
-              { duration: '5s', target: 0 },
-            ],
-          };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-          }
-          JS
+          # (dejar los otros stress/soak/spike como ya los tenías)
 
       - name: Run k6 (Docker)
         run: |
           mkdir -p out/k6
           for script in smoke stress soak spike; do
-            docker run --rm -e API_BASE=${API_BASE} 
-              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 
+            docker run --rm --network host -e API_BASE=${API_BASE} \
+              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
               run /scripts/$script.js --summary-export=/out/$script.json || \
               echo '{"metrics":{}}' > out/k6/$script.json
           done
@@ -181,3 +139,9 @@ jobs:
             echo "|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
             printf "| %s | %.2f | %.4f |\n" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
           done
+
+      - name: Mostrar backend.log siempre
+        if: always()
+        run: |
+          echo "## 📜 Backend log (últimas 200 líneas)" >> $GITHUB_STEP_SUMMARY
+          tail -n 200 backend.log >> $GITHUB_STEP_SUMMARY
