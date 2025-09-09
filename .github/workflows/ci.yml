@@ -9,8 +9,25 @@ jobs:
   backend-tests:
     name: JUnit (Maven)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        ports: ["5432:5432"]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: arreglaya
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     env:
       SPRING_PROFILES_ACTIVE: test
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: root
+
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +86,6 @@ jobs:
           java-version: '17'
           cache: maven
 
-      # Levantamos el backend en background (perfil test/H2)
       - name: Boot backend (background)
         run: |
           nohup mvn -DskipTests -Dspring.profiles.active=${{ env.SPRING_PROFILES_ACTIVE }} spring-boot:run > backend.log 2>&1 &
