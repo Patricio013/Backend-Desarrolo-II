@@ -1,7 +1,5 @@
 package com.example.demo.dto;
 
-import org.antlr.v4.runtime.misc.NotNull;
-
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.fasterxml.jackson.annotation.JsonProperty;
 

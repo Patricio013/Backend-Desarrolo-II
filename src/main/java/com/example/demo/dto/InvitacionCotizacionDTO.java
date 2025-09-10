@@ -12,6 +12,7 @@ public class InvitacionCotizacionDTO {
     private Long solicitudId;
     private Long rubroId;           // corresponde a categoriaId de la Solicitud
     private Long prestadorId;
+    private Long cotizacionId;
     private String prestadorNombre; // nombre + apellido del prestador
     private String mensaje;         // texto de la invitación
     private boolean enviado;        // resultado de la simulación

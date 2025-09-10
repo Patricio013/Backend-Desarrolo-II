@@ -26,6 +26,7 @@ public class SolicitudService {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
 
+    private final NotificacionesService notificacionesService;
     private final PrestadorRepository prestadorRepository;
     private final SolicitudRepository solicitudRepository;
     private final SimulatedCotizacionClient cotizacionClient;
@@ -34,11 +35,13 @@ public class SolicitudService {
     public SolicitudService(PrestadorRepository prestadorRepository,
                             SolicitudRepository solicitudRepository,
                             SimulatedCotizacionClient cotizacionClient,
-                            SimulatedSolicitudesClient solicitudesClient) {
+                            SimulatedSolicitudesClient solicitudesClient,
+                            NotificacionesService notificacionesService) {
         this.prestadorRepository = prestadorRepository;
         this.solicitudRepository = solicitudRepository;
         this.cotizacionClient = cotizacionClient;
         this.solicitudesClient = solicitudesClient;
+        this.notificacionesService = notificacionesService;
     }
 
     /**
@@ -75,7 +78,7 @@ public class SolicitudService {
         );
 
         List<Prestador> candidatos = prestadorRepository.findByRubroIdNative(rubroId);
-
+        
         List<Prestador> top3 = candidatos.stream()
                 .sorted(Comparator.comparingDouble(SolicitudService::promedioCalificaciones).reversed())
                 .limit(3)
@@ -99,7 +102,16 @@ public class SolicitudService {
         List<InvitacionCotizacionDTO> invitaciones = top3.stream()
                 .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Invitación a cotizar"))
                 .peek(dto -> dto.setEnviado(cotizacionClient.enviarInvitacion(dto)))
-                .collect(Collectors.toList());
+                .peek(dto -> {
+            // Si ya tenés cotizacionId real, usalo. Si no, podés usar solicitudId temporalmente.
+            Long cotizacionId = dto.getCotizacionId() != null ? dto.getCotizacionId() : dto.getSolicitudId();
+            notificacionesService.notificarInvitacionCotizacion(
+                cotizacionId,
+                "Invitación de cotización enviada",
+                "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+            );
+        })
+            .collect(Collectors.toList());
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
@@ -129,8 +141,27 @@ public class SolicitudService {
                 p,
                 "Asignación directa de la solicitud por favor cotizar"
         );
+
+        // 1) Enviar invitación (simulado)
         aviso.setEnviado(cotizacionClient.enviarInvitacion(aviso));
 
+        // 2) Crear notificación interna para otros módulos
+        //    Usamos cotizacionId si viene; si no, usamos solicitudId como referencia.
+        Long refCotizacion = (aviso.getCotizacionId() != null)
+                ? aviso.getCotizacionId()
+                : aviso.getSolicitudId();
+
+            notificacionesService.crearNotificacion(
+                com.example.demo.entity.Notificaciones.builder()
+                        .cotizacionId(refCotizacion) // si tu columna es NOT NULL y no tenés cotización creada, usar solicitudId como referencia
+                        .titulo("Asignación directa: invitación enviada")
+                        .mensaje("Se notificó al prestador " + aviso.getPrestadorId()
+                                + " por la solicitud " + aviso.getSolicitudId())
+                        .leida(false)
+                        .build()
+        );
+
+        // 3) Actualizar estado y persistir
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
 
