@@ -44,28 +44,53 @@ jobs:
         if: always()
         run: |
           echo "## ✅ JUnit Summary" >> $GITHUB_STEP_SUMMARY
-          passed=$(grep -h "<testsuite " **/target/surefire-reports/*.xml | awk -F'"' '{for(i=1;i<=NF;i++){if($i~/tests=/){t=$(i+1)}; if($i~/failures=/){f=$(i+1)}; if($i~/errors=/){e=$(i+1)}; if($i~/skipped=/){s=$(i+1)}}; print t,f,e,s}' | awk '{T+=$1;F+=$2;E+=$3;S+=$4} END {print T,F,E,S}')
-          T=$(echo $passed | awk '{print $1}'); F=$(echo $passed | awk '{print $2}'); E=$(echo $passed | awk '{print $3}'); S=$(echo $passed | awk '{print $4}')
+
+          # Buscar todos los XML de JUnit (surefire + failsafe)
+          mapfile -t REPORTS < <(find . -type f \( -path "*/target/surefire-reports/*.xml" -o -path "*/target/failsafe-reports/*.xml" \))
+
+          if [ ${#REPORTS[@]} -eq 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "_No se encontraron reportes JUnit (¿se ejecutaron tests?)._" >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+
+          # Totales: tests, failures, errors, skipped
+          totals=$(awk -F'"' '
+            /<testsuite / {
+              for (i=1;i<=NF;i++) {
+                if ($i ~ /tests=/)    T += $(i+1)
+                if ($i ~ /failures=/) F += $(i+1)
+                if ($i ~ /errors=/)   E += $(i+1)
+                if ($i ~ /skipped=/)  S += $(i+1)
+              }
+            }
+            END { printf "%d %d %d %d\n", T, F, E, S }
+          ' "${REPORTS[@]}")
+
+          T=$(echo "$totals" | awk '{print $1}')
+          F=$(echo "$totals" | awk '{print $2}')
+          E=$(echo "$totals" | awk '{print $3}')
+          S=$(echo "$totals" | awk '{print $4}')
+
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Total | Failures | Errors | Skipped |" >> $GITHUB_STEP_SUMMARY
-          echo "|------:|---------:|------:|--------:|" >> $GITHUB_STEP_SUMMARY
+          echo "|------:|---------:|-------:|--------:|" >> $GITHUB_STEP_SUMMARY
           echo "| $T | $F | $E | $S |" >> $GITHUB_STEP_SUMMARY
 
+          # Archivos analizados
           echo "" >> $GITHUB_STEP_SUMMARY
-          count_files=$(ls **/target/surefire-reports/*.xml | wc -l)
-          echo "📂 Archivos analizados: $count_files" >> $GITHUB_STEP_SUMMARY
-          for f in $(ls **/target/surefire-reports/*.xml); do
-            echo "- $(basename $f)" >> $GITHUB_STEP_SUMMARY
+          echo "📂 Archivos analizados: ${#REPORTS[@]}" >> $GITHUB_STEP_SUMMARY
+          for f in "${REPORTS[@]}"; do
+            echo "- $(basename "$f")" >> $GITHUB_STEP_SUMMARY
           done
 
-          # Clases ejecutadas
+          # Clases ejecutadas (nombre del testsuite)
           echo "" >> $GITHUB_STEP_SUMMARY
-          count_classes=$(grep -h "<testsuite " **/target/surefire-reports/*.xml | \
-            awk -F'"' '{for(i=1;i<=NF;i++){if($i~/name=/){print $(i+1)}}}' | sort | uniq | wc -l)
-          echo "🧪 Clases de test: $count_classes" >> $GITHUB_STEP_SUMMARY
-          grep -h "<testsuite " **/target/surefire-reports/*.xml | \
-            awk -F'"' '{for(i=1;i<=NF;i++){if($i~/name=/){print $(i+1)}}}' | sort | uniq | \
-            sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+          mapfile -t CLASSES < <(awk -F'"' '/<testsuite /{ for(i=1;i<=NF;i++){ if($i ~ /name=/){ print $(i+1) } } }' "${REPORTS[@]}" | sort -u)
+          echo "🧪 Clases de test: ${#CLASSES[@]}" >> $GITHUB_STEP_SUMMARY
+          for c in "${CLASSES[@]}"; do
+            echo "- $c" >> $GITHUB_STEP_SUMMARY
+          done
 
   k6-load:
     name: k6 (smoke/stress/soak/spike)
