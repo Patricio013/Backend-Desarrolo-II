@@ -33,6 +33,65 @@ public class SolicitudService {
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
 
     @Transactional
+    public SolicitudTop3Resultado recotizar(Long solicitudId) {
+        Solicitud solicitud = solicitudRepository.findById(solicitudId)
+            .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + solicitudId));
+
+        if (solicitud.getEstado() != EstadoSolicitud.CANCELADA) {
+            // podés relajar esto si querés recotizar igual
+            throw new IllegalStateException("La solicitud no está CANCELADA");
+        }
+
+        Long rubroId = Objects.requireNonNull(solicitud.getCategoriaId(), "categoriaId requerido");
+
+        // Base: excluí todos los que YA COTIZARON esta solicitud
+        List<Prestador> candidatos = prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(
+            rubroId, solicitud.getId(), PageRequest.of(0, 10) // traigo 10 por si alguno lo filtro luego
+        );
+
+        // Extra: si hubo asignado directo y querés excluirlo aunque no haya cotizado
+        Long asignado = obtenerPrestadorAsignadoId(solicitud);
+        if (asignado != null) {
+            candidatos = candidatos.stream().filter(p -> !p.getId().equals(asignado)).toList();
+        }
+
+        List<Prestador> top3 = candidatos.stream().limit(3).toList();
+        if (top3.isEmpty()) {
+            var out = new SolicitudTop3Resultado();
+            out.setSolicitudId(solicitud.getId());
+            out.setDescripcion(solicitud.getDescripcion());
+            out.setEstado(solicitud.getEstado().name()); // sigue CANCELADA
+            out.setTop3(List.of());
+            return out;
+        }
+
+        // Volver a COTIZANDO y enviar
+        solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitudRepository.save(solicitud);
+
+        var invitaciones = top3.stream()
+            .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Recotización: invitación a cotizar"))
+            .peek(dto -> {
+                dto.setEnviado(cotizacionClient.enviarInvitacion(dto));
+                Long ref = dto.getCotizacionId() != null ? dto.getCotizacionId() : dto.getSolicitudId();
+                notificacionesService.notificarInvitacionCotizacion(
+                    ref,
+                    "Recotización: invitación enviada",
+                    "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+                );
+            })
+            .collect(Collectors.toList());
+
+        var out = new SolicitudTop3Resultado();
+        out.setSolicitudId(solicitud.getId());
+        out.setDescripcion(solicitud.getDescripcion());
+        out.setEstado(solicitud.getEstado().name()); // COTIZANDO
+        out.setTop3(invitaciones);
+        return out;
+    }
+
+
+    @Transactional
     public List<SolicitudTop3Resultado> procesarTodasLasCreadas() {
         List<Solicitud> creadas = solicitudesClient.obtenerSolicitudesCreadas();
         log.info("Procesando {} solicitudes en estado CREADA", creadas.size());
