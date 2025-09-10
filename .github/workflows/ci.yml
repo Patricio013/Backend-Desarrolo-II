@@ -77,7 +77,7 @@ jobs:
         run: |
           nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
           echo "⏳ Esperando a que levante el backend..."
-          for i in {1..120}; do
+          for i in {1..120}; do # hasta 4 minutos
             if curl -sf http://localhost:8080/actuator/health > /dev/null; then 
               echo "✅ Backend UP"
               break
@@ -89,6 +89,9 @@ jobs:
       - name: Prepare k6 scripts
         run: |
           mkdir -p tests/k6 out/k6
+          chmod 777 out/k6
+
+          # SMOKE
           cat > tests/k6/smoke.js <<'JS'
           import http from 'k6/http';
           import { check, sleep } from 'k6';
@@ -100,11 +103,60 @@ jobs:
             sleep(1);
           }
           JS
-          # agregar stress.js, soak.js y spike.js igual que antes
+
+          # STRESS
+          cat > tests/k6/stress.js <<'JS'
+          import http from 'k6/http';
+          import { check } from 'k6';
+          export const options = {
+            stages: [
+              { duration: '20s', target: 20 },
+              { duration: '20s', target: 50 },
+              { duration: '20s', target: 100 },
+              { duration: '20s', target: 0 },
+            ],
+          };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+          }
+          JS
+
+          # SOAK
+          cat > tests/k6/soak.js <<'JS'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          export const options = { vus: 10, duration: '2m' };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+            sleep(1);
+          }
+          JS
+
+          # SPIKE
+          cat > tests/k6/spike.js <<'JS'
+          import http from 'k6/http';
+          import { check } from 'k6';
+          export const options = {
+            stages: [
+              { duration: '5s', target: 5 },
+              { duration: '5s', target: 200 },
+              { duration: '10s', target: 5 },
+              { duration: '5s', target: 0 },
+            ],
+          };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+          }
+          JS
 
       - name: Run k6 (Docker)
         run: |
-          mkdir -p out/k6
           for script in smoke stress soak spike; do
             docker run --rm --network host -e API_BASE=${API_BASE} \
               -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
