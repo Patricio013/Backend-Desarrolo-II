@@ -105,12 +105,17 @@ jobs:
 
       - name: Run k6 (Docker)
         run: |
+          mkdir -p out/k6
+          chmod 777 out/k6
+          ls -l tests/k6   # 👈 debug, para confirmar que los scripts existen
           for script in smoke stress soak spike; do
+            echo "▶️ Ejecutando $script.js"
             docker run --rm --network host -e API_BASE=${API_BASE} \
               -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
               run /scripts/$script.js --summary-export=/out/$script.json || \
               echo '{"metrics":{}}' > out/k6/$script.json
           done
+
 
       - name: Subir artefactos k6
         uses: actions/upload-artifact@v4
