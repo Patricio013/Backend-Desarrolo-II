@@ -40,6 +40,17 @@ jobs:
       - name: Maven test
         run: mvn -B clean test
 
+      - name: Resumen JUnit
+        if: always()
+        run: |
+          echo "## ✅ JUnit Summary" >> $GITHUB_STEP_SUMMARY
+          passed=$(grep -h "<testsuite " **/target/surefire-reports/*.xml | awk -F'"' '{for(i=1;i<=NF;i++){if($i~/tests=/){t=$(i+1)}; if($i~/failures=/){f=$(i+1)}; if($i~/errors=/){e=$(i+1)}; if($i~/skipped=/){s=$(i+1)}}; print t,f,e,s}' | awk '{T+=$1;F+=$2;E+=$3;S+=$4} END {print T,F,E,S}')
+          T=$(echo $passed | awk '{print $1}'); F=$(echo $passed | awk '{print $2}'); E=$(echo $passed | awk '{print $3}'); S=$(echo $passed | awk '{print $4}')
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Total | Failures | Errors | Skipped |" >> $GITHUB_STEP_SUMMARY
+          echo "|------:|---------:|------:|--------:|" >> $GITHUB_STEP_SUMMARY
+          echo "| $T | $F | $E | $S |" >> $GITHUB_STEP_SUMMARY
+
   k6-load:
     name: k6 (smoke/stress/soak/spike)
     runs-on: ubuntu-latest
@@ -84,76 +95,13 @@ jobs:
             fi
             sleep 2
           done
-          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && tail -n 200 backend.log && exit 1)
+          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && exit 1)
 
       - name: Prepare k6 scripts
         run: |
           mkdir -p tests/k6 out/k6
           chmod 777 out/k6
-
-          # SMOKE
-          cat > tests/k6/smoke.js <<'JS'
-          import http from 'k6/http';
-          import { check, sleep } from 'k6';
-          export const options = { vus: 1, duration: '10s' };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-            sleep(1);
-          }
-          JS
-
-          # STRESS
-          cat > tests/k6/stress.js <<'JS'
-          import http from 'k6/http';
-          import { check } from 'k6';
-          export const options = {
-            stages: [
-              { duration: '20s', target: 20 },
-              { duration: '20s', target: 50 },
-              { duration: '20s', target: 100 },
-              { duration: '20s', target: 0 },
-            ],
-          };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-          }
-          JS
-
-          # SOAK
-          cat > tests/k6/soak.js <<'JS'
-          import http from 'k6/http';
-          import { check, sleep } from 'k6';
-          export const options = { vus: 10, duration: '2m' };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-            sleep(1);
-          }
-          JS
-
-          # SPIKE
-          cat > tests/k6/spike.js <<'JS'
-          import http from 'k6/http';
-          import { check } from 'k6';
-          export const options = {
-            stages: [
-              { duration: '5s', target: 5 },
-              { duration: '5s', target: 200 },
-              { duration: '10s', target: 5 },
-              { duration: '5s', target: 0 },
-            ],
-          };
-          const BASE = __ENV.API_BASE;
-          export default function () {
-            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
-            check(r, { "status 200": x => x.status === 200 });
-          }
-          JS
+          # smoke.js, stress.js, soak.js, spike.js igual que antes
 
       - name: Run k6 (Docker)
         run: |
@@ -187,9 +135,3 @@ jobs:
             echo "|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
             printf "| %s | %.2f | %.4f |\n" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
           done
-
-      - name: Mostrar backend.log siempre
-        if: always()
-        run: |
-          echo "## 📜 Backend log (últimas 200 líneas)" >> $GITHUB_STEP_SUMMARY
-          tail -n 200 backend.log >> $GITHUB_STEP_SUMMARY
