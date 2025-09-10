@@ -15,7 +15,6 @@ import java.util.ArrayList;
 public class Prestador {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @Column(nullable = false, length = 100)
@@ -51,9 +50,16 @@ public class Prestador {
     )
     private final List<Habilidad> habilidades = new ArrayList<>();
 
+    @ElementCollection
+    @CollectionTable(
+        name = "prestador_calificacion",
+        joinColumns = @JoinColumn(name = "prestador_id")
+    )
+    @Column(name = "puntuacion")
     @Builder.Default
-    @OneToMany(mappedBy = "prestador", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<Calificacion> calificaciones = new ArrayList<>();
+    private List<Short> calificacion = new ArrayList<>();
+
+    private Integer trabajosFinalizados;
 
     public Prestador(Long id) {
         this.id = id;
