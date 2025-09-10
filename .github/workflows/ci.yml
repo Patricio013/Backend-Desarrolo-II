@@ -44,6 +44,11 @@ jobs:
         if: always()
         run: |
           echo "## ✅ JUnit Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🧪 Clases de test" >> $GITHUB_STEP_SUMMARY
+          grep -h "<testsuite " **/target/surefire-reports/*.xml | \
+            awk -F'"' '{for(i=1;i<=NF;i++){if($i~/name=/){print $(i+1)}}}' | sort | uniq | \
+            sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
           passed=$(grep -h "<testsuite " **/target/surefire-reports/*.xml | awk -F'"' '{for(i=1;i<=NF;i++){if($i~/tests=/){t=$(i+1)}; if($i~/failures=/){f=$(i+1)}; if($i~/errors=/){e=$(i+1)}; if($i~/skipped=/){s=$(i+1)}}; print t,f,e,s}' | awk '{T+=$1;F+=$2;E+=$3;S+=$4} END {print T,F,E,S}')
           T=$(echo $passed | awk '{print $1}'); F=$(echo $passed | awk '{print $2}'); E=$(echo $passed | awk '{print $3}'); S=$(echo $passed | awk '{print $4}')
           echo "" >> $GITHUB_STEP_SUMMARY
