@@ -2,9 +2,10 @@ name: backend-ci-cd
 
 on:
   push:
-    branches: [ "main", "devops" ]
+    branches: [ "main", "DevOps" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "DevOps" ]
+  workflow_dispatch:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
