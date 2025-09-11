@@ -1,4 +1,4 @@
-package com.example.demo.dto;
+package com.example.demo.dto;   
 
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.fasterxml.jackson.annotation.JsonProperty;
