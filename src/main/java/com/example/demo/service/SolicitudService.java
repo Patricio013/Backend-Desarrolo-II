@@ -4,10 +4,12 @@ import com.example.demo.client.SimulatedCotizacionClient;
 import com.example.demo.client.SimulatedSolicitudesClient;
 import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.dto.InvitacionCotizacionDTO;
+import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.PrestadorRepository;
+import com.example.demo.repository.RubroRepository;
 import com.example.demo.repository.SolicitudRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,7 +18,9 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -31,6 +35,7 @@ public class SolicitudService {
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
+    @Autowired private RubroRepository rubroService;
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
@@ -42,7 +47,7 @@ public class SolicitudService {
             throw new IllegalStateException("La solicitud no está CANCELADA");
         }
 
-        Long rubroId = Objects.requireNonNull(solicitud.getCategoriaId(), "categoriaId requerido");
+        Long rubroId = Objects.requireNonNull(solicitud.getRubroId(), "rubroId requerido");
 
         // Base: excluí todos los que YA COTIZARON esta solicitud
         List<Prestador> candidatos = prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(
@@ -54,6 +59,9 @@ public class SolicitudService {
         if (asignado != null) {
             candidatos = candidatos.stream().filter(p -> !p.getId().equals(asignado)).toList();
         }
+        candidatos = candidatos.stream()
+            .filter(p -> estaLibre(p, solicitud))
+            .toList();
 
         List<Prestador> top3 = candidatos.stream().limit(3).toList();
         if (top3.isEmpty()) {
@@ -105,13 +113,18 @@ public class SolicitudService {
         }
 
         Long rubroId = Objects.requireNonNull(
-            solicitud.getCategoriaId(),
+            solicitud.getRubroId(),
             "categoriaId (rubro) requerido en solicitud " + solicitud.getId()
         );
 
-        List<Prestador> top3 = prestadorRepository.findTopByRubroRanked(
-            rubroId, PageRequest.of(0, 3)
+        List<Prestador> candidatos = prestadorRepository.findTopByRubroRanked(
+            rubroId, PageRequest.of(0, 10) // pedí más de 3 para que haya margen al filtrar
         );
+
+        List<Prestador> top3 = candidatos.stream()
+            .filter(p -> estaLibre(p, solicitud))
+            .limit(3)
+            .toList();
 
         if (top3.isEmpty()) {
             log.warn("Sin candidatos ACTIVO para rubro {} (solicitud {}) — se mantiene en CREADA", rubroId, solicitud.getId());
@@ -163,7 +176,7 @@ public class SolicitudService {
 
         InvitacionCotizacionDTO aviso = buildInvitacionDTO(
             solicitud,
-            Objects.requireNonNull(solicitud.getCategoriaId()),
+            Objects.requireNonNull(solicitud.getRubroId()),
             p,
             "Asignación directa de la solicitud por favor cotizar"
         );
@@ -210,4 +223,72 @@ public class SolicitudService {
         } catch (Exception ignored) {}
         return null;
     }
+
+    private boolean estaLibre(Prestador prestador, Solicitud solicitud) {
+        if (solicitud.getPreferenciaDia() == null ||
+            solicitud.getPreferenciaDesde() == null ||
+            solicitud.getPreferenciaHasta() == null) {
+            return true; // si no hay preferencia, no filtramos
+        }
+    
+        List<Solicitud> asignadas = solicitudRepository.findAsignadasEnDiaYFranja(
+            prestador.getId(),
+            solicitud.getPreferenciaDia(),
+            solicitud.getPreferenciaDesde(),
+            solicitud.getPreferenciaHasta()
+        );
+    
+        return asignadas.isEmpty(); // libre si no hay choque
+    }
+
+    /**
+     * Procesa un lote de solicitudes y las persiste.
+     * Si alguna ya existe (mismo ID), la ignora (idempotencia).
+     */
+    @Transactional
+    public List<Solicitud> crearDesdeEventos(List<SolicitudesCreadasDTO> eventos) {
+        return eventos.stream()
+            .map(this::mapearYGuardar)
+            .collect(Collectors.toList());
+    }
+
+    private Solicitud mapearYGuardar(SolicitudesCreadasDTO e) {
+        if (solicitudRepository.existsById(e.getSolicitudId())) {
+            return solicitudRepository.findById(e.getSolicitudId()).orElse(null);
+        }
+
+        Solicitud.SolicitudBuilder b = Solicitud.builder()
+            .id(e.getSolicitudId())
+            .usuarioId(e.getUsuarioId())
+            .rubroId(rubroService.findByNombre(e.getRubro()).getId())
+            .descripcion(e.getDescripcion())
+            .estado(EstadoSolicitud.CREADA)
+            .prestadorAsignadoId(e.getPrestadorId());
+
+        // Preferencia horaria
+        var ph = e.getPreferenciaHoraria();
+        if (ph != null) {
+            if (ph.getDia() != null && !ph.getDia().isBlank()) {
+                b.preferenciaDia(LocalDate.parse(ph.getDia()));
+            }
+            if (ph.getVentana() != null && !ph.getVentana().isBlank()) {
+                b.preferenciaVentanaStr(ph.getVentana());
+                var v = parseVentana(ph.getVentana());
+                b.preferenciaDesde(v.desde);
+                b.preferenciaHasta(v.hasta);
+            }
+        }
+
+        return solicitudRepository.save(b.build());
+    }
+
+    private Ventana parseVentana(String ventana) {
+        String[] p = ventana.split("-");
+        if (p.length != 2) throw new IllegalArgumentException("Ventana inválida: " + ventana);
+        LocalTime desde = LocalTime.parse(p[0].trim());
+        LocalTime hasta = LocalTime.parse(p[1].trim());
+        return new Ventana(desde, hasta);
+    }
+
+    private record Ventana(LocalTime desde, LocalTime hasta) {}
 }

@@ -199,12 +199,27 @@ SELECT id, 9 FROM prestador WHERE id BETWEEN 41 AND 50;
 -- =========================
 -- Solicitudes de prueba
 -- =========================
-INSERT INTO solicitud (id, usuario_id, servicio_id, categoria_id, descripcion, estado,
-  cotizacion_aceptada_id, prestador_asignado_id, created_at, updated_at) VALUES
-  (1001, 1, 5001, 3, 'Pintar living y pasillo', 'CREADA', NULL, NULL, NOW(), NOW()),
-  (1002, 2, 5002, 3, 'Pintura exterior de balcon', 'CREADA', NULL, NULL, NOW(), NOW()),
-  (1003, 3, 5003, 2, 'Revision de cableado en cocina', 'CREADA', NULL, NULL, NOW(), NOW()),
-  (1004, 4, 5004, 1, 'Cambio de sanitario en bano', 'CREADA', NULL, 1, NOW(), NOW())
+INSERT INTO solicitud (id, usuario_id, rubro_id, descripcion, estado,
+  prestador_asignado_id, created_at, updated_at) VALUES
+  (1001, 1, 3, 'Pintar living y pasillo', 'CREADA', NULL, NOW(), NOW()),
+  (1002, 2, 3, 'Pintura exterior de balcon', 'CREADA', NULL, NOW(), NOW()),
+  (1003, 3, 2, 'Revision de cableado en cocina', 'CREADA', NULL, NOW(), NOW()),
+  (1004, 4, 1, 'Cambio de sanitario en bano', 'CREADA', 1, NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+-- Solicitudes de prueba que bloquean al prestador 21
+INSERT INTO solicitud (id, usuario_id, rubro_id, descripcion, estado,
+  prestador_asignado_id, preferencia_dia, preferencia_desde, preferencia_hasta,
+  created_at, updated_at)
+VALUES
+  (2001, 1, 1, 'Arreglo de caño cocina', 'ASIGNADA', 21, '2025-09-12', '09:00', '13:00', NOW(), NOW()),
+  (2002, 2, 1, 'Cambio de inodoro', 'EN_PROGRESO', 21, '2025-09-12', '14:00', '18:00', NOW(), NOW())
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO solicitud (id, usuario_id, rubro_id, descripcion, estado,
+  prestador_asignado_id, preferencia_dia, preferencia_desde, preferencia_hasta,
+  created_at, updated_at)
+VALUES
+  (3001, 5, 1, 'Destapar caño del baño', 'CREADA', NULL,
+   '2025-09-12', '09:00', '13:00', NOW(), NOW())
 ON CONFLICT (id) DO NOTHING;
 
 -- ======================================================================

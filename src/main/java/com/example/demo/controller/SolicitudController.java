@@ -2,6 +2,8 @@ package com.example.demo.controller;
 
 import com.example.demo.service.SolicitudService;
 import com.example.demo.dto.InvitacionCotizacionDTO;
+import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.entity.Solicitud;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +27,12 @@ public class SolicitudController {
     public ResponseEntity<List<SolicitudTop3Resultado>> invitarTop3ParaTodasLasCreadas() {
         List<SolicitudTop3Resultado> out = solicitudService.procesarTodasLasCreadas();
         return ResponseEntity.ok(out);
+    }
+
+    @PostMapping("/crear")
+    public ResponseEntity<List<Solicitud>> crearSolicitudes(@RequestBody List<SolicitudesCreadasDTO> solicitudesDto) {
+        List<Solicitud> creadas = solicitudService.crearDesdeEventos(solicitudesDto);
+        return ResponseEntity.ok(creadas);
     }
 
     // ===== respuesta por solicitud =====

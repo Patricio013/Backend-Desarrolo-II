@@ -2,7 +2,9 @@ package com.example.demo.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 
 import com.example.demo.entity.enums.EstadoSolicitud;
 
@@ -15,29 +17,31 @@ import com.example.demo.entity.enums.EstadoSolicitud;
 public class Solicitud {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Long id; // este es el "solicitud_id" que viene del Core
 
     @Column(nullable = false)
     private Long usuarioId;
 
     @Column(nullable = false)
-    private Long servicioId;
-
-    @Column(nullable = false)
-    private Long categoriaId;
+    private Long rubroId;
 
     @Column(columnDefinition = "TEXT")
     private String descripcion;
+
+    private Long prestadorAsignadoId;
+
+    // Preferencia horaria normalizada
+    private LocalDate preferenciaDia;
+    private LocalTime preferenciaDesde;
+    private LocalTime preferenciaHasta;
+
+    @Column(length = 20)
+    private String preferenciaVentanaStr;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     @Builder.Default
     private EstadoSolicitud estado = EstadoSolicitud.CREADA;
-
-    private Long cotizacionAceptadaId;
-
-    private Long prestadorAsignadoId;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
