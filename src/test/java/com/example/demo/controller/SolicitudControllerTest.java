@@ -1,32 +1,62 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.service.SolicitudService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.ResponseEntity;
 
-import java.util.Collections;
+import java.util.List;
 
-import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(SolicitudController.class)
 class SolicitudControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockBean
+    @Mock
     private SolicitudService solicitudService;
 
-    @Test
-    void invitarTop3_debeRetornar200() throws Exception {
-        when(solicitudService.procesarTodasLasCreadas()).thenReturn(Collections.emptyList());
+    @InjectMocks
+    private SolicitudController controller;
 
-        mockMvc.perform(post("/api/solicitudes/invitar-top3"))
-               .andExpect(status().isOk());
+    @BeforeEach
+    void setUp() {
+        MockitoAnnotations.openMocks(this);
+    }
+
+    @Test
+    void invitarTop3ParaTodasLasCreadas_ok() {
+        SolicitudController.SolicitudTop3Resultado mockResult =
+                new SolicitudController.SolicitudTop3Resultado();
+        mockResult.setSolicitudId(1L);
+        mockResult.setEstado("COTIZANDO");
+        mockResult.setTop3(List.of(new InvitacionCotizacionDTO()));
+
+        when(solicitudService.procesarTodasLasCreadas()).thenReturn(List.of(mockResult));
+
+        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> response =
+                controller.invitarTop3ParaTodasLasCreadas();
+
+        assertEquals(200, response.getStatusCodeValue());
+        assertEquals(1, response.getBody().size());
+        assertEquals("COTIZANDO", response.getBody().get(0).getEstado());
+    }
+
+    @Test
+    void cancelarSolicitud_ok() {
+        doNothing().when(solicitudService).cancelarPorId(5L);
+
+        controller.cancelar(5L);
+
+        verify(solicitudService).cancelarPorId(5L);
+    }
+
+    @Test
+    void recotizarSolicitud_placeholder() {
+        // Método vacío -> solo verificamos que no falle
+        controller.recotizarSolicitud("abc");
     }
 }
