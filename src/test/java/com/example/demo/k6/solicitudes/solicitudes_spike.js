@@ -12,6 +12,6 @@ export const options = {
 const BASE = __ENV.API_BASE;
 
 export default function () {
-    let res = http.post(`${BASE}/api/solicitudes/invitar-top3`);
-    check(res, { "invitar top3 spike ok": r => r.status === 200 });
+    let res = http.patch(`${BASE}/api/solicitudes/1/cancelar`);
+    check(res, { "PATCH /cancelar 200|204": r => r.status === 200 || r.status === 204 });
 }

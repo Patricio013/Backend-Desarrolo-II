@@ -5,14 +5,26 @@ export const options = { vus: 1, duration: '10s' };
 const BASE = __ENV.API_BASE;
 
 export default function () {
-    let res = http.post(`${BASE}/api/solicitudes/invitar-top3`);
-    check(res, { "invitar top3 ok": r => r.status === 200 });
+    // Invitar top3
+    let res1 = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", {
+        headers: { "Content-Type": "application/json" },
+    });
+    check(res1, { "POST /invitar-top3 200": r => r.status === 200 });
 
-    res = http.patch(`${BASE}/api/solicitudes/1/cancelar`);
-    check(res, { "cancelar solicitud ok": r => r.status === 200 || r.status === 404 });
+    // Crear solicitudes
+    let res2 = http.post(`${BASE}/api/solicitudes/crear`,
+        JSON.stringify([{ descripcion: "Nueva solicitud de prueba" }]),
+        { headers: { "Content-Type": "application/json" } }
+    );
+    check(res2, { "POST /crear 200": r => r.status === 200 });
 
-    res = http.put(`${BASE}/api/solicitudes/path/1/recotizar`);
-    check(res, { "recotizar solicitud ok": r => r.status === 200 || r.status === 204 || r.status === 404 });
+    // Cancelar (id 1, dummy)
+    let res3 = http.patch(`${BASE}/api/solicitudes/1/cancelar`);
+    check(res3, { "PATCH /cancelar 200|204": r => r.status === 200 || r.status === 204 });
+
+    // Recotizar (id 1, dummy)
+    let res4 = http.put(`${BASE}/api/solicitudes/path/1/recotizar`);
+    check(res4, { "PUT /recotizar 200|204": r => r.status === 200 || r.status === 204 });
 
     sleep(1);
 }
