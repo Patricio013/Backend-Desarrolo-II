@@ -32,24 +32,26 @@ class PrestadorSyncControllerTest {
         PrestadorDTO dto = new PrestadorDTO();
         dto.setId(1L);
 
-        doNothing().when(syncService).upsertDesdeDTO(dto);
+        ResponseEntity<String> res = controller.upsert(dto);
 
-        ResponseEntity<String> resp = controller.upsert(dto);
-
-        assertEquals("ok", resp.getBody());
-        verify(syncService).upsertDesdeDTO(dto);
+        assertEquals("ok", res.getBody());
+        assertEquals(200, res.getStatusCode().value());
+        verify(syncService).upsertDesdeDTO(dto); // ✅ verifica que se llamó
     }
 
     @Test
     void upsertBatch_ok() {
-        PrestadorDTO dto1 = new PrestadorDTO(); dto1.setId(1L);
-        PrestadorDTO dto2 = new PrestadorDTO(); dto2.setId(2L);
+        PrestadorDTO dto1 = new PrestadorDTO();
+        dto1.setId(1L);
+        PrestadorDTO dto2 = new PrestadorDTO();
+        dto2.setId(2L);
 
-        doNothing().when(syncService).upsertDesdeDTO(any());
+        List<PrestadorDTO> list = List.of(dto1, dto2);
 
-        ResponseEntity<String> resp = controller.upsertBatch(List.of(dto1, dto2));
+        ResponseEntity<String> res = controller.upsertBatch(list);
 
-        assertEquals("ok", resp.getBody());
+        assertEquals("ok", res.getBody());
+        assertEquals(200, res.getStatusCode().value());
         verify(syncService, times(2)).upsertDesdeDTO(any());
     }
 }
