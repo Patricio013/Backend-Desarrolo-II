@@ -11,6 +11,7 @@ import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.RubroRepository;
 import com.example.demo.repository.SolicitudRepository;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Optional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -222,6 +224,24 @@ public class SolicitudService {
             if (v instanceof Long) return (Long) v;
         } catch (Exception ignored) {}
         return null;
+    }
+
+    public void cancelarPorId(Long solicitudId){
+        Optional<Solicitud> Opt = solicitudRepository.findById(solicitudId);
+        Solicitud s = Opt.get();
+
+        if (Opt.isEmpty()){
+            System.out.println("solicitud no encontrada.");
+        }else if(s.getEstado() == EstadoSolicitud.COMPLETADA){
+            System.out.println("no se puede cancelar una solicitu completada.");
+        }else if (s.getEstado() == EstadoSolicitud.CANCELADA){
+            System.out.println("la solicitud ya esta cancelada.");
+        }else{
+            s.setEstado(EstadoSolicitud.CANCELADA);
+            System.out.println("solicitud cancelada correctamente");
+        }
+        s.setEstado(EstadoSolicitud.CANCELADA);
+        solicitudRepository.save(s);
     }
 
     private boolean estaLibre(Prestador prestador, Solicitud solicitud) {
