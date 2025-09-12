@@ -4,7 +4,7 @@
     "start-server-and-test": "^2.1.0"
   },
   "scripts": {
-    "cy:open": "cypress open",
-    "cy:run": "cypress run"
+    "cy:open": "src/test/java/com/example/demo/cypress open",
+    "cy:run": "src/test/java/com/example/demo/cypress run"
   }
 }
