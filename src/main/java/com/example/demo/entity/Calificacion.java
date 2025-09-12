@@ -33,7 +33,7 @@ public class Calificacion {
     @JoinColumn(name = "prestador_id", nullable = false)
     private Prestador prestador;
 
-    @Column(nullable = false)
+    @Column(nullable = false) // De 1 a 5
     private Short puntuacion;
 
     @Lob

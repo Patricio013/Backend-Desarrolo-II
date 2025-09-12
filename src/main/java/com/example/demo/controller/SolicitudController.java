@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.service.SolicitudService;
+
 import com.example.demo.dto.InvitacionCotizacionDTO;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.PathVariable;
+
 
 @RestController
 @RequestMapping("/api/solicitudes")
@@ -42,5 +47,15 @@ public class SolicitudController {
         public void setEstado(String estado) { this.estado = estado; }
         public List<InvitacionCotizacionDTO> getTop3() { return top3; }
         public void setTop3(List<InvitacionCotizacionDTO> top3) { this.top3 = top3; }
+    }
+
+    @PatchMapping("/{id}/cancelar")
+    public void cancelar(@PathVariable Long id) {
+        solicitudService.cancelarPorId(id);
+    }
+
+    @PutMapping("path/{id}/recotizar")
+    public void recotizarSolicitud(@PathVariable String id) {
+        
     }
 }
