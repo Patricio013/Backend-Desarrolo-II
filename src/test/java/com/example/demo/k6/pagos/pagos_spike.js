@@ -12,6 +12,13 @@ export const options = {
 const BASE = __ENV.API_BASE;
 
 export default function () {
-    let res = http.get(`${BASE}/api/pagos/ultimas`);
-    check(res, { "ultimas pagos spike ok": r => r.status === 200 });
+    const payload = JSON.stringify({ monto: 999, descripcion: "Spike test" });
+
+    let res = http.post(`${BASE}/api/pagos`, payload, {
+        headers: { "Content-Type": "application/json" },
+    });
+    check(res, { "POST /api/pagos -> 200": r => r.status === 200 });
+
+    res = http.get(`${BASE}/api/pagos/ultimas`);
+    check(res, { "GET /api/pagos/ultimas -> 200": r => r.status === 200 });
 }
