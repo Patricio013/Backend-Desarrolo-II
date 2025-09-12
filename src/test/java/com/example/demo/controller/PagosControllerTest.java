@@ -13,7 +13,6 @@ import org.mockito.MockitoAnnotations;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -36,7 +35,7 @@ class PagosControllerTest {
     }
 
     @Test
-    void crearPago_deberiaRetornarDTO() {
+    void crearPago_ok() {
         SolicitudPagoCreateDTO input = new SolicitudPagoCreateDTO();
         SolicitudPagoDTO output = new SolicitudPagoDTO();
         output.setId(1L);
@@ -51,10 +50,10 @@ class PagosControllerTest {
     }
 
     @Test
-    void ultimasPagos_deberiaRetornarLista() {
+    void ultimasPagos_ok() {
         SolicitudPagoDTO dto = new SolicitudPagoDTO();
         dto.setId(1L);
-        SolicitudPago entity = new SolicitudPago();
+        var entity = new SolicitudPago();
         entity.setId(1L);
         entity.setCreatedAt(LocalDateTime.now());
 
@@ -68,8 +67,8 @@ class PagosControllerTest {
     }
 
     @Test
-    void getPago_existenteDeberiaRetornarDTO() {
-        SolicitudPago entity = new SolicitudPago();
+    void getPago_ok() {
+        var entity = new SolicitudPago();
         entity.setId(10L);
         SolicitudPagoDTO dto = new SolicitudPagoDTO();
         dto.setId(10L);
@@ -84,9 +83,8 @@ class PagosControllerTest {
     }
 
     @Test
-    void getPago_inexistenteDeberiaLanzarExcepcion() {
+    void getPago_notFound() {
         when(repo.findById(99L)).thenReturn(Optional.empty());
-
-        assertThrows(NoSuchElementException.class, () -> controller.get(99L));
+        assertThrows(RuntimeException.class, () -> controller.get(99L));
     }
 }
