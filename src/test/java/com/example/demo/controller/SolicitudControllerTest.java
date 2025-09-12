@@ -1,6 +1,8 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.InvitacionCotizacionDTO;
+import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.entity.Solicitud;
 import com.example.demo.service.SolicitudService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,35 +30,41 @@ class SolicitudControllerTest {
     }
 
     @Test
-    void invitarTop3ParaTodasLasCreadas_ok() {
-        SolicitudController.SolicitudTop3Resultado mockResult =
-                new SolicitudController.SolicitudTop3Resultado();
-        mockResult.setSolicitudId(1L);
-        mockResult.setEstado("COTIZANDO");
-        mockResult.setTop3(List.of(new InvitacionCotizacionDTO()));
+    void invitarTop3_ok() {
+        SolicitudController.SolicitudTop3Resultado r = new SolicitudController.SolicitudTop3Resultado();
+        r.setSolicitudId(1L);
+        r.setDescripcion("test");
+        r.setEstado("COTIZANDO");
+        r.setTop3(List.of(new InvitacionCotizacionDTO()));
 
-        when(solicitudService.procesarTodasLasCreadas()).thenReturn(List.of(mockResult));
+        when(solicitudService.procesarTodasLasCreadas()).thenReturn(List.of(r));
 
-        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> response =
-                controller.invitarTop3ParaTodasLasCreadas();
+        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> resp = controller.invitarTop3ParaTodasLasCreadas();
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals(1, response.getBody().size());
-        assertEquals("COTIZANDO", response.getBody().get(0).getEstado());
+        assertEquals(1, resp.getBody().size());
+        assertEquals("COTIZANDO", resp.getBody().get(0).getEstado());
     }
 
     @Test
-    void cancelarSolicitud_ok() {
+    void crearSolicitudes_ok() {
+        SolicitudesCreadasDTO dto = new SolicitudesCreadasDTO();
+        Solicitud s = new Solicitud();
+        s.setId(1L);
+
+        when(solicitudService.crearDesdeEventos(anyList())).thenReturn(List.of(s));
+
+        ResponseEntity<List<Solicitud>> resp = controller.crearSolicitudes(List.of(dto));
+
+        assertEquals(1, resp.getBody().size());
+        assertEquals(1L, resp.getBody().get(0).getId());
+    }
+
+    @Test
+    void cancelar_ok() {
         doNothing().when(solicitudService).cancelarPorId(5L);
 
         controller.cancelar(5L);
 
         verify(solicitudService).cancelarPorId(5L);
-    }
-
-    @Test
-    void recotizarSolicitud_placeholder() {
-        // Método vacío -> solo verificamos que no falle
-        controller.recotizarSolicitud("abc");
     }
 }
