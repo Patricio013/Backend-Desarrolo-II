@@ -9,4 +9,7 @@ import java.util.List;
 @Repository
 public interface NotificacionesRepository extends JpaRepository<Notificaciones, Long>{
     //List<Notificaciones> findByUsuarioId(Long usuario_id);
+    List<Notificaciones> findTop100ByLeidaFalseOrderByFechaAsc();
+
+    List<Notificaciones> findByCotizacionIdOrderByFechaDesc(Long cotizacionId);
 }
