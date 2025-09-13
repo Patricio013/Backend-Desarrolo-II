@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "cypress": "^15.1.0",
+    "start-server-and-test": "^2.1.0"
+  },
+  "scripts": {
+    "cy:open": "src/test/java/com/example/demo/cypress open",
+    "cy:run": "src/test/java/com/example/demo/cypress run"
+  }
+}
