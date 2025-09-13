@@ -25,6 +25,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +34,7 @@ public class SolicitudService {
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
 
     @Autowired private NotificacionesService notificacionesService;
+    @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
     @Autowired private PrestadorRepository prestadorRepository;
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
@@ -78,6 +80,14 @@ public class SolicitudService {
         // Volver a COTIZANDO y enviar
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO (recotización)
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud recotizada",
+            "La solicitud volvió a COTIZANDO",
+            Map.of()
+        );
 
         var invitaciones = top3.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Recotización: invitación a cotizar"))
@@ -88,6 +98,14 @@ public class SolicitudService {
                     ref,
                     "Recotización: invitación enviada",
                     "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+                );
+                // Evento WS por invitación
+                solicitudEventsPublisher.notifySolicitudEvent(
+                    solicitud,
+                    "INVITACION_ENVIADA",
+                    "Recotización: invitación enviada",
+                    "Se invitó al prestador " + dto.getPrestadorId(),
+                    Map.of("prestadorId", dto.getPrestadorId())
                 );
             })
             .collect(Collectors.toList());
@@ -140,6 +158,14 @@ public class SolicitudService {
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud en cotización",
+            "La solicitud pasó a COTIZANDO",
+            Map.of()
+        );
 
         var invitaciones = top3.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Invitación a cotizar"))
@@ -150,6 +176,14 @@ public class SolicitudService {
                     cotizacionId,
                     "Invitación de cotización enviada",
                     "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+                );
+                // Evento WS por invitación
+                solicitudEventsPublisher.notifySolicitudEvent(
+                    solicitud,
+                    "INVITACION_ENVIADA",
+                    "Invitación de cotización enviada",
+                    "Se invitó al prestador " + dto.getPrestadorId(),
+                    Map.of("prestadorId", dto.getPrestadorId())
                 );
             })
             .collect(Collectors.toList());
@@ -196,8 +230,25 @@ public class SolicitudService {
                 .build()
         );
 
+        // Evento WS por invitación (asignación directa)
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "INVITACION_ENVIADA",
+            "Asignación directa: invitación enviada",
+            "Se invitó al prestador " + aviso.getPrestadorId(),
+            Map.of("prestadorId", aviso.getPrestadorId())
+        );
+
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud en cotización",
+            "La solicitud pasó a COTIZANDO",
+            Map.of()
+        );
 
         out.setEstado(solicitud.getEstado().name());
         out.setTop3(List.of(aviso));
@@ -242,6 +293,14 @@ public class SolicitudService {
         }
         s.setEstado(EstadoSolicitud.CANCELADA);
         solicitudRepository.save(s);
+        // Notificar cancelación
+        solicitudEventsPublisher.notifySolicitudEvent(
+            s,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud cancelada",
+            "La solicitud fue cancelada",
+            Map.of()
+        );
     }
 
     private boolean estaLibre(Prestador prestador, Solicitud solicitud) {
@@ -299,7 +358,18 @@ public class SolicitudService {
             }
         }
 
-        return solicitudRepository.save(b.build());
+        Solicitud creada = solicitudRepository.save(b.build());
+        // Notificar creación en estado CREADA
+        try {
+            solicitudEventsPublisher.notifySolicitudEvent(
+                creada,
+                "SOLICITUD_CREATED",
+                "Solicitud creada",
+                "Se creó la solicitud",
+                Map.of()
+            );
+        } catch (Exception ignored) {}
+        return creada;
     }
 
     private Ventana parseVentana(String ventana) {
