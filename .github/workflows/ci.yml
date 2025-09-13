@@ -210,14 +210,33 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq >/dev/null
           echo "## 📈 k6 Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
+
+          totalReqs=0
+          totalFail=0
+          allP95=()
+
           for f in out/k6/*.json; do
             tag=$(basename "$f" .json)
             reqs=$(jq '.metrics.http_reqs.count // 0' "$f")
             p95=$(jq '.metrics.http_req_duration["p(95)"] // 0' "$f")
             fail=$(jq '.metrics.http_req_failed.rate // 0' "$f")
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### $tag" >> $GITHUB_STEP_SUMMARY
-            echo "| Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
-            echo "|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
-            printf "| %s | %.2f | %.4f |\n" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
+
+            totalReqs=$((totalReqs + reqs))
+            # acumulo fallas estimadas
+            failCount=$(echo "$reqs * $fail" | bc -l | awk '{printf "%d", $1}')
+            totalFail=$((totalFail + failCount))
+            allP95+=($p95)
+
+            printf "| %s | %s | %.2f | %.4f |\n" "$tag" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
           done
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Totales" >> $GITHUB_STEP_SUMMARY
+          globalFailRate=$(echo "$totalFail / $totalReqs" | bc -l)
+          avgP95=$(printf "%.2f" $(echo "${allP95[@]}" | awk '{s=0; for(i=1;i<=NF;i++) s+=$i; print s/NF}'))
+          printf "| Total Requests | Avg p95 (ms) | Global Fail rate |\n" >> $GITHUB_STEP_SUMMARY
+          printf "|---------------:|-------------:|-----------------:|\n" >> $GITHUB_STEP_SUMMARY
+          printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
