@@ -24,6 +24,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Objects;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -381,4 +382,82 @@ public class SolicitudService {
     }
 
     private record Ventana(LocalTime desde, LocalTime hasta) {}
+
+    // --- Listado en formato WS ---
+    public List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> listarTodasComoWs() {
+        return solicitudRepository.findAll().stream()
+            .map(this::buildWsEventSegunEstado)
+            .collect(Collectors.toList());
+    }
+
+    private com.example.demo.websocket.SolicitudEventsPublisher.WsEvent buildWsEventSegunEstado(Solicitud s) {
+        var estado = s.getEstado();
+        String status = (estado != null) ? estado.name() : null;
+        String type = "";
+        String title = "";
+        String description = "";
+        Map<String, Object> details = new HashMap<>();
+        details.put("solicitudId", s.getId());
+
+        if (estado == null) {
+            type = "SOLICITUD_STATUS";
+            title = "Estado de solicitud";
+            description = "La solicitud está en estado desconocido";
+        } else switch (estado) {
+            case CREADA -> {
+                type = "SOLICITUD_CREADA";
+                title = "Solicitud creada";
+                description = "La solicitud está CREADA";
+                putIfNotNull(details, "usuarioId", s.getUsuarioId());
+                putIfNotNull(details, "rubroId", s.getRubroId());
+                putIfNotNull(details, "descripcion", s.getDescripcion());
+                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
+                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
+                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
+            }
+            case COTIZANDO -> {
+                type = "SOLICITUD_COTIZANDO";
+                title = "Solicitud en cotización";
+                description = "La solicitud está COTIZANDO";
+                putIfNotNull(details, "rubroId", s.getRubroId());
+                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
+                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
+                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
+            }
+            case ASIGNADA -> {
+                type = "SOLICITUD_ASIGNADA";
+                title = "Solicitud asignada";
+                description = "La solicitud está ASIGNADA";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+            }
+            case EN_PROGRESO -> {
+                type = "SOLICITUD_EN_PROGRESO";
+                title = "Solicitud en progreso";
+                description = "La solicitud está EN_PROGRESO";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+            }
+            case COMPLETADA -> {
+                type = "SOLICITUD_COMPLETADA";
+                title = "Solicitud completada";
+                description = "La solicitud está COMPLETADA";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+                putIfNotNull(details, "completedAt", s.getUpdatedAt());
+            }
+            case CANCELADA -> {
+                type = "SOLICITUD_CANCELADA";
+                title = "Solicitud cancelada";
+                description = "La solicitud está CANCELADA";
+                putIfNotNull(details, "canceledAt", s.getUpdatedAt());
+            }
+        }
+
+        return new com.example.demo.websocket.SolicitudEventsPublisher.WsEvent(
+                type, status, title, description, details);
+    }
+
+    private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
+        if (value != null) map.put(key, value);
+    }
 }
