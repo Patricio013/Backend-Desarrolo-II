@@ -63,7 +63,12 @@ public class SolicitudController {
     }
 
     @PutMapping("path/{id}/recotizar")
-    public void recotizarSolicitud(@PathVariable String id) {
-        
+    public void recotizarSolicitud(@PathVariable Long id) {
+        solicitudService.recotizar(id);
+    }
+
+    @GetMapping("/ws")
+    public ResponseEntity<List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent>> listarTodasComoWs() {
+        return ResponseEntity.ok(solicitudService.listarTodasComoWs());
     }
 }
