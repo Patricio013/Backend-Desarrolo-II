@@ -302,7 +302,7 @@ jobs:
           npx cypress run \
             --env API_BASE=http://localhost:8080 \
             --reporter json \
-            --reporter-options "output=out/cypress/results.json" \
+            --reporter-options "output=out/cypress/results.json,overwrite=true" \
             || true
   
 
@@ -324,19 +324,24 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq >/dev/null
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-          
-          json=$(find out/cypress -name "*.json" | head -n 1)
-          if [ -f "$json" ]; then
-            total=$(jq '.stats.tests' "$json")
-            passed=$(jq '.stats.passes' "$json")
-            failed=$(jq '.stats.failures' "$json")
-            skipped=$(jq '.stats.pending' "$json")
-            duration=$(jq '.stats.duration' "$json")
-          
+
+          if [ -f out/cypress/results.json ]; then
+            total=$(jq '.stats.tests' out/cypress/results.json)
+            passed=$(jq '.stats.passes' out/cypress/results.json)
+            failed=$(jq '.stats.failures' out/cypress/results.json)
+            skipped=$(jq '.stats.pending' out/cypress/results.json)
+            duration=$(jq '.stats.duration' out/cypress/results.json)
+
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
             echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
             echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$failed" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
+              jq -r '.failures[]?.fullTitle' out/cypress/results.json | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+            fi
           else
             echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
           fi
