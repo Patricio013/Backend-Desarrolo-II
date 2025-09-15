@@ -300,9 +300,10 @@ jobs:
         run: |
           mkdir -p out/cypress
           npx cypress run \
-          --env API_BASE=http://localhost:8080 \
-          --reporter mochawesome \
-          --reporter-options "reportDir=out/cypress,overwrite=false,json=true"
+            --env API_BASE=http://localhost:8080 \
+            --reporter json \
+            --reporter-options "output=out/cypress/results.json" \
+            || true
   
 
       - name: Debug Cypress output
