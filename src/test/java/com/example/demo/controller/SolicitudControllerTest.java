@@ -1,6 +1,5 @@
 package com.example.demo.controller;
 
-import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.service.SolicitudService;
@@ -19,7 +18,7 @@ import static org.mockito.Mockito.*;
 class SolicitudControllerTest {
 
     @Mock
-    private SolicitudService solicitudService;
+    private SolicitudService service;
 
     @InjectMocks
     private SolicitudController controller;
@@ -31,40 +30,58 @@ class SolicitudControllerTest {
 
     @Test
     void invitarTop3_ok() {
-        SolicitudController.SolicitudTop3Resultado r = new SolicitudController.SolicitudTop3Resultado();
-        r.setSolicitudId(1L);
-        r.setDescripcion("test");
-        r.setEstado("COTIZANDO");
-        r.setTop3(List.of(new InvitacionCotizacionDTO()));
+        var dto = new SolicitudController.SolicitudTop3Resultado();
+        dto.setSolicitudId(1L);
+        dto.setEstado("COTIZANDO");
 
-        when(solicitudService.procesarTodasLasCreadas()).thenReturn(List.of(r));
+        when(service.procesarTodasLasCreadas()).thenReturn(List.of(dto));
 
-        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> resp = controller.invitarTop3ParaTodasLasCreadas();
+        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> res = controller.invitarTop3ParaTodasLasCreadas();
 
-        assertEquals(1, resp.getBody().size());
-        assertEquals("COTIZANDO", resp.getBody().get(0).getEstado());
+        assertEquals(200, res.getStatusCodeValue());
+        assertEquals(1, res.getBody().size());
+        verify(service).procesarTodasLasCreadas();
     }
 
     @Test
     void crearSolicitudes_ok() {
-        SolicitudesCreadasDTO dto = new SolicitudesCreadasDTO();
         Solicitud s = new Solicitud();
-        s.setId(1L);
+        s.setId(10L);
+        when(service.crearDesdeEventos(any())).thenReturn(List.of(s));
 
-        when(solicitudService.crearDesdeEventos(anyList())).thenReturn(List.of(s));
+        ResponseEntity<List<Solicitud>> res = controller.crearSolicitudes(List.of(new SolicitudesCreadasDTO()));
 
-        ResponseEntity<List<Solicitud>> resp = controller.crearSolicitudes(List.of(dto));
-
-        assertEquals(1, resp.getBody().size());
-        assertEquals(1L, resp.getBody().get(0).getId());
+        assertEquals(200, res.getStatusCodeValue());
+        assertEquals(1L, res.getBody().get(0).getId());
+        verify(service).crearDesdeEventos(any());
     }
 
     @Test
     void cancelar_ok() {
-        doNothing().when(solicitudService).cancelarPorId(5L);
+        doNothing().when(service).cancelarPorId(5L);
 
         controller.cancelar(5L);
 
-        verify(solicitudService).cancelarPorId(5L);
+        verify(service).cancelarPorId(5L);
+    }
+
+    @Test
+    void recotizar_ok() {
+        doNothing().when(service).recotizar(7L);
+
+        controller.recotizarSolicitud(7L);
+
+        verify(service).recotizar(7L);
+    }
+
+    @Test
+    void listarTodasComoWs_ok() {
+        when(service.listarTodasComoWs()).thenReturn(List.of());
+
+        var res = controller.listarTodasComoWs();
+
+        assertEquals(200, res.getStatusCodeValue());
+        assertNotNull(res.getBody());
+        verify(service).listarTodasComoWs();
     }
 }
