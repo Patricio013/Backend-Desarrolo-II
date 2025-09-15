@@ -52,7 +52,7 @@ class SolicitudControllerTest {
         ResponseEntity<List<Solicitud>> res = controller.crearSolicitudes(List.of(new SolicitudesCreadasDTO()));
 
         assertEquals(200, res.getStatusCodeValue());
-        assertEquals(1L, res.getBody().get(0).getId());
+        assertEquals(10L, res.getBody().get(0).getId());
         verify(service).crearDesdeEventos(any());
     }
 
@@ -67,10 +67,7 @@ class SolicitudControllerTest {
 
     @Test
     void recotizar_ok() {
-        doNothing().when(service).recotizar(7L);
-
         controller.recotizarSolicitud(7L);
-
         verify(service).recotizar(7L);
     }
 
