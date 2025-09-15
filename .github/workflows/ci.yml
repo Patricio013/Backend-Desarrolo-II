@@ -323,18 +323,19 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y jq >/dev/null
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f out/cypress/results.json ]; then
-            total=$(jq '.stats.tests' out/cypress/results.json)
-            passed=$(jq '.stats.passes' out/cypress/results.json)
-            failed=$(jq '.stats.failures' out/cypress/results.json)
-            skipped=$(jq '.stats.skipped' out/cypress/results.json)
-            duration=$(jq '.stats.duration' out/cypress/results.json)
-
+          
+          json=$(find out/cypress -name "*.json" | head -n 1)
+          if [ -f "$json" ]; then
+            total=$(jq '.stats.tests' "$json")
+            passed=$(jq '.stats.passes' "$json")
+            failed=$(jq '.stats.failures' "$json")
+            skipped=$(jq '.stats.pending' "$json")
+            duration=$(jq '.stats.duration' "$json")
+          
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
             echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
             echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "_No Cypress results found._" >> $GITHUB_STEP_SUMMARY
+            echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
           fi
