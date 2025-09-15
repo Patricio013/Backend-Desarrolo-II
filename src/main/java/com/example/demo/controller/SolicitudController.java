@@ -10,6 +10,8 @@ import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Solicitud;
+import com.example.demo.dto.SolicitudAsignarDTO;
+import com.example.demo.dto.SolicitudPagoDTO;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -81,6 +83,13 @@ public class SolicitudController {
             "prestadorID", body.getPrestadorId(),
             "monto", body.getMonto()
         ));
+    }
+
+    // Aceptar una cotización: asigna la solicitud y genera solicitud de pago
+    @PostMapping("/asignar")
+    public ResponseEntity<SolicitudPagoDTO> asignar(@Valid @RequestBody SolicitudAsignarDTO body) {
+        SolicitudPagoDTO dto = cotizacionService.aceptarYAsignar(body);
+        return ResponseEntity.status(HttpStatus.CREATED).body(dto);
     }
 
 

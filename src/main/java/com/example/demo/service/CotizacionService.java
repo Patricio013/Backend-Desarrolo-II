@@ -6,6 +6,9 @@ import com.example.demo.client.BusquedasClient;              // <-- comentá si 
 import com.example.demo.client.SimulatedSolicitudesClient;
 import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.SolicitudCotizacionesPut;        // <-- comentá si no lo tenés
+import com.example.demo.dto.SolicitudAsignarDTO;
+import com.example.demo.dto.SolicitudPagoCreateDTO;
+import com.example.demo.dto.SolicitudPagoDTO;
 import com.example.demo.entity.Cotizacion;
 // import com.example.demo.entity.Notificaciones;           // <-- comentá si no lo usás
 import com.example.demo.websocket.SolicitudEventsPublisher;      // <-- ajustá el paquete si difiere
@@ -53,6 +56,9 @@ public class CotizacionService {
     // Publisher de eventos (tu capa WS). Ajustá el tipo/paquete si es distinto.
     @Autowired
     private SolicitudEventsPublisher solicitudEventsPublisher;
+
+    @Autowired
+    private SolicitudPagoService solicitudPagoService;
 
     @Transactional
     public void recibirCotizacion(CotizacionesSubmit in) {
@@ -165,5 +171,102 @@ public class CotizacionService {
             }
         });
         // =================================================================
+    }
+
+    /**
+     * Acepta una cotización para una solicitud, marca la solicitud como ASIGNADA
+     * con el prestador indicado y genera/envía una Solicitud de Pago.
+     */
+    @Transactional
+    public SolicitudPagoDTO aceptarYAsignar(SolicitudAsignarDTO in) {
+        if (in == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Body requerido");
+
+        var solicitud = solicitudRepository.findById(in.getSolicitudId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Solicitud no encontrada: " + in.getSolicitudId()));
+
+        var prestador = prestadorRepository.findById(in.getPrestadorId())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                        "Prestador no encontrado: " + in.getPrestadorId()));
+
+        // Validar estado razonable para asignar
+        if (solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.CANCELADA
+                || solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.COMPLETADA) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "La solicitud no puede asignarse en su estado actual");
+        }
+
+        // Debe existir una cotización de ese prestador para esa solicitud
+        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_Id(in.getPrestadorId(), in.getSolicitudId());
+        var cotizacion = opt.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
+                "No existe cotización del prestador " + in.getPrestadorId() + " para la solicitud " + in.getSolicitudId()));
+
+        // Pagos completos: el monto debe ser igual al total cotizado
+        BigDecimal totalCotizado = BigDecimal.valueOf(cotizacion.getValor());
+        if (in.getMonto() != null && totalCotizado.compareTo(in.getMonto()) != 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "El pago debe ser por el total cotizado: " + totalCotizado);
+        }
+
+        // Marcar solicitud como ASIGNADA y setear prestador asignado
+        solicitud.setEstado(com.example.demo.entity.enums.EstadoSolicitud.ASIGNADA);
+        solicitud.setPrestadorAsignadoId(prestador.getId());
+        solicitudRepository.save(solicitud);
+
+        // Crear y enviar solicitud de pago
+        String concepto = (in.getConcepto() != null && !in.getConcepto().isBlank())
+                ? in.getConcepto()
+                : ("Pago total por solicitud " + solicitud.getId());
+
+        SolicitudPagoCreateDTO pagoIn = SolicitudPagoCreateDTO.builder()
+                .solicitudId(solicitud.getId())
+                .ordenId(null)
+                .prestadorId(prestador.getId())
+                .cotizacionId(cotizacion.getId())
+                .monto(totalCotizado)
+                .concepto(concepto)
+                .vencimiento(in.getVencimiento())
+                .build();
+
+        SolicitudPagoDTO pagoDTO = solicitudPagoService.crearYEnviar(pagoIn);
+
+        // WS: notificar aceptación y cambio de estado a ASIGNADA luego del commit
+        final Long solicitudIdFinal   = solicitud.getId();
+        final Long prestadorIdFinal   = prestador.getId();
+        final Long cotizacionIdFinal  = cotizacion.getId();
+        final BigDecimal montoFinal   = totalCotizado;
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() {
+                // Evento puntual de asignación
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        "SOLICITUD_ASIGNADA",
+                        "Solicitud asignada",
+                        "Prestador " + prestadorIdFinal + " asignado. Pago total $" + montoFinal,
+                        Map.of(
+                                "solicitudId",  solicitudIdFinal,
+                                "prestadorId",  prestadorIdFinal,
+                                "cotizacionId", cotizacionIdFinal,
+                                "monto",        montoFinal,
+                                "estado",       com.example.demo.entity.enums.EstadoSolicitud.ASIGNADA.name()
+                        )
+                );
+
+                // Snapshot/refresh de estado
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        "SOLICITUD_STATUS",
+                        "Estado de solicitud",
+                        "La solicitud pasó a ASIGNADA",
+                        Map.of(
+                                "solicitudId",        solicitudIdFinal,
+                                "estado",             com.example.demo.entity.enums.EstadoSolicitud.ASIGNADA.name(),
+                                "prestadorAsignadoId", prestadorIdFinal
+                        )
+                );
+            }
+        });
+
+        return pagoDTO;
     }
 }
