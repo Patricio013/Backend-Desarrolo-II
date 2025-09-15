@@ -40,7 +40,6 @@ public class SolicitudService {
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
-    @Autowired private RubroRepository rubroService;
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
@@ -340,7 +339,7 @@ public class SolicitudService {
         Solicitud.SolicitudBuilder b = Solicitud.builder()
             .id(e.getSolicitudId())
             .usuarioId(e.getUsuarioId())
-            .rubroId(rubroService.findByNombre(e.getRubro()).getId())
+            .rubroId(e.getRubro())
             .descripcion(e.getDescripcion())
             .estado(EstadoSolicitud.CREADA)
             .prestadorAsignadoId(e.getPrestadorId());
