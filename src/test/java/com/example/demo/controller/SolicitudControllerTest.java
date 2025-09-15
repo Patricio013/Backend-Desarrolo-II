@@ -79,12 +79,11 @@ class SolicitudControllerTest {
 
     @Test
     void recotizar_ok() {
-        doNothing().when(solicitudService).recotizar(7L);
-
         controller.recotizarSolicitud(7L);
 
         verify(solicitudService).recotizar(7L);
     }
+
 
     @Test
     void recibirCotizacion_ok() {
