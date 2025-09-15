@@ -103,6 +103,10 @@ jobs:
           cache: maven
 
       - name: Boot backend (background)
+        env:
+          SPRING_DATASOURCE_URL: ${{ env.SPRING_DATASOURCE_URL }}
+          SPRING_DATASOURCE_USERNAME: ${{ env.SPRING_DATASOURCE_USERNAME }}
+          SPRING_DATASOURCE_PASSWORD: ${{ env.SPRING_DATASOURCE_PASSWORD }}
         run: |
           nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
           echo "⏳ Esperando a que levante el backend..."
@@ -113,7 +117,7 @@ jobs:
             fi
             sleep 2
           done
-          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && exit 1)
+          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && (cat backend.log || true) && exit 1)
 
       - name: Prepare k6 scripts
         run: |
