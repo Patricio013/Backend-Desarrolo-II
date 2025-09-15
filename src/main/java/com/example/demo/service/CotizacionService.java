@@ -2,37 +2,57 @@
 package com.example.demo.service;
 
 import com.example.demo.client.CoreCotizacionesClient;
-import com.example.demo.client.BusquedasClient;       // <-- comentá si no lo tenés
-import com.example.demo.dto.CotizacionesSubmit;
+import com.example.demo.client.BusquedasClient;              // <-- comentá si no lo tenés
 import com.example.demo.client.SimulatedSolicitudesClient;
-import com.example.demo.dto.SolicitudCotizacionesPut; // <-- comentá si no lo tenés
+import com.example.demo.dto.CotizacionesSubmit;
+import com.example.demo.dto.SolicitudCotizacionesPut;        // <-- comentá si no lo tenés
 import com.example.demo.entity.Cotizacion;
-//import com.example.demo.entity.Notificaciones;        // <-- comentá si no lo usás
+// import com.example.demo.entity.Notificaciones;           // <-- comentá si no lo usás
+import com.example.demo.websocket.SolicitudEventsPublisher;      // <-- ajustá el paquete si difiere
 import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudRepository;
-import lombok.RequiredArgsConstructor;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class CotizacionService {
 
-    private final CotizacionRepository cotizacionRepository;
-    private final PrestadorRepository prestadorRepository;
-    private final SolicitudRepository solicitudRepository;
-    private final CoreCotizacionesClient coreClient;
-    private final SimulatedSolicitudesClient solicitudesClient;
-    private final BusquedasClient busquedasClient;
-    //private final NotificacionesService notificacionesService;
+    @Autowired
+    private CotizacionRepository cotizacionRepository;
 
+    @Autowired
+    private PrestadorRepository prestadorRepository;
+
+    @Autowired
+    private SolicitudRepository solicitudRepository;
+
+    @Autowired
+    private CoreCotizacionesClient coreClient;
+
+    @Autowired
+    private SimulatedSolicitudesClient solicitudesClient;
+
+    @Autowired
+    private BusquedasClient busquedasClient;
+
+    // @Autowired
+    // private NotificacionesService notificacionesService;
+
+    // Publisher de eventos (tu capa WS). Ajustá el tipo/paquete si es distinto.
+    @Autowired
+    private SolicitudEventsPublisher solicitudEventsPublisher;
 
     @Transactional
     public void recibirCotizacion(CotizacionesSubmit in) {
@@ -95,17 +115,55 @@ public class CotizacionService {
         busquedasClient.indexarSolicitudCotizaciones(payload);
 
         // (5) Notificación interna (opcional)
-        //notificacionesService.crearNotificacion(
-        //Notificaciones.builder()
-        //    .cotizacionId(cotizacion.getId())
-        //    .titulo(created ? "Cotización recibida" : "Cotización actualizada")
-        //    .mensaje("idsolicitud=" + solicitud.getId()
-        //            + ", idprestador=" + prestador.getId()
-        //            + ", monto=" + in.getMonto())
-        //    .fecha(java.time.LocalDateTime.now())  // <-- acá el cambio
-        //    .leida(false)
-        //    .build()
-        //);
-        // ===============================================================================
+        // notificacionesService.crearNotificacion(
+        //     Notificaciones.builder()
+        //         .cotizacionId(cotizacion.getId())
+        //         .titulo(created ? "Cotización recibida" : "Cotización actualizada")
+        //         .mensaje("idsolicitud=" + solicitud.getId()
+        //                 + ", idprestador=" + prestador.getId()
+        //                 + ", monto=" + in.getMonto())
+        //         .fecha(java.time.LocalDateTime.now())
+        //         .leida(false)
+        //         .build()
+        // );
+
+        // ===================== WebSocket post-commit =====================
+        final boolean createdFinal   = created;
+        final Long solicitudIdFinal  = solicitud.getId();
+        final Long prestadorIdFinal  = prestador.getId();
+        final Long cotizacionIdFinal = cotizacion.getId();
+        final BigDecimal montoFinal  = in.getMonto();
+        final int totalCotizaciones  = items.size();
+
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override public void afterCommit() {
+                // Evento puntual (para toasts/notifs)
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        createdFinal ? "COTIZACION_RECIBIDA" : "COTIZACION_ACTUALIZADA",
+                        createdFinal ? "Cotización recibida" : "Cotización actualizada",
+                        "Prestador " + prestadorIdFinal + " cotizó $" + montoFinal,
+                        Map.of(
+                                "solicitudId",  solicitudIdFinal,
+                                "prestadorId",  prestadorIdFinal,
+                                "cotizacionId", cotizacionIdFinal,
+                                "monto",        montoFinal
+                        )
+                );
+
+                // Evento de snapshot para refrescar listados/tablas
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        "SOLICITUD_COTIZACIONES_SYNC",
+                        "Cotizaciones sincronizadas",
+                        "Se actualizó la lista completa de cotizaciones",
+                        Map.of(
+                                "solicitudId", solicitudIdFinal,
+                                "total",       totalCotizaciones
+                        )
+                );
+            }
+        });
+        // =================================================================
     }
 }
