@@ -299,7 +299,11 @@ jobs:
       - name: Run Cypress tests
         run: |
           mkdir -p out/cypress
-          npx cypress run || true
+          npx cypress run \
+          --env API_BASE=http://localhost:8080 \
+          --reporter mochawesome \
+          --reporter-options "reportDir=out/cypress,overwrite=false,json=true"
+  
 
       - name: Debug Cypress output
         if: always()
