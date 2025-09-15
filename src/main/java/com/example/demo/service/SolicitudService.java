@@ -9,7 +9,6 @@ import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.PrestadorRepository;
-import com.example.demo.repository.RubroRepository;
 import com.example.demo.repository.SolicitudRepository;
 
 import org.slf4j.Logger;
