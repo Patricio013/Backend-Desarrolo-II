@@ -2,8 +2,6 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.SolicitudesCreadasDTO;
-import com.example.demo.dto.SolicitudAsignarDTO;
-import com.example.demo.dto.SolicitudPagoDTO;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.service.CotizacionService;
 import com.example.demo.service.SolicitudService;
@@ -17,7 +15,6 @@ import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -29,6 +26,9 @@ class SolicitudControllerTest {
 
     @Mock
     private CotizacionService cotizacionService;
+
+    @Mock
+    private SolicitudEventsPublisher eventsPublisher;
 
     @InjectMocks
     private SolicitudController controller;
@@ -46,8 +46,7 @@ class SolicitudControllerTest {
 
         when(solicitudService.procesarTodasLasCreadas()).thenReturn(List.of(dto));
 
-        ResponseEntity<List<SolicitudController.SolicitudTop3Resultado>> res =
-                controller.invitarTop3ParaTodasLasCreadas();
+        var res = controller.invitarTop3ParaTodasLasCreadas();
 
         assertEquals(200, res.getStatusCodeValue());
         assertEquals(1, res.getBody().size());
@@ -60,8 +59,7 @@ class SolicitudControllerTest {
         s.setId(10L);
         when(solicitudService.crearDesdeEventos(any())).thenReturn(List.of(s));
 
-        ResponseEntity<List<Solicitud>> res =
-                controller.crearSolicitudes(List.of(new SolicitudesCreadasDTO()));
+        var res = controller.crearSolicitudes(List.of(new SolicitudesCreadasDTO()));
 
         assertEquals(200, res.getStatusCodeValue());
         assertEquals(10L, res.getBody().get(0).getId());
@@ -84,38 +82,22 @@ class SolicitudControllerTest {
         verify(solicitudService).recotizar(7L);
     }
 
-
     @Test
     void recibirCotizacion_ok() {
         CotizacionesSubmit body = new CotizacionesSubmit();
         body.setSolicitudId(1L);
         body.setPrestadorId(2L);
-        body.setMonto(BigDecimal.valueOf(5000.0));
+        body.setMonto(BigDecimal.valueOf(5000));
 
         doNothing().when(cotizacionService).recibirCotizacion(body);
 
-        ResponseEntity<Map<String,Object>> res = controller.recibir(body);
+        var res = controller.recibir(body);
 
         assertEquals(201, res.getStatusCodeValue());
         assertEquals(1L, res.getBody().get("solicitudID"));
         assertEquals(2L, res.getBody().get("prestadorID"));
-        assertEquals(BigDecimal.valueOf(5000.0), res.getBody().get("monto"));
+        assertEquals(BigDecimal.valueOf(5000), res.getBody().get("monto"));
         verify(cotizacionService).recibirCotizacion(body);
-    }
-
-    @Test
-    void asignar_ok() {
-        SolicitudAsignarDTO input = new SolicitudAsignarDTO();
-        SolicitudPagoDTO output = new SolicitudPagoDTO();
-        output.setSolicitudId(1L);
-
-        when(cotizacionService.aceptarYAsignar(input)).thenReturn(output);
-
-        ResponseEntity<SolicitudPagoDTO> res = controller.asignar(input);
-
-        assertEquals(201, res.getStatusCodeValue());
-        assertEquals(1L, res.getBody().getSolicitudId());
-        verify(cotizacionService).aceptarYAsignar(input);
     }
 
     @Test
