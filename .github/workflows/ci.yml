@@ -130,85 +130,105 @@ jobs:
           mkdir -p out/k6
           chmod 777 out/k6
           for script in tests/k6/*.js; do
-            name=$(basename "$script" .js)
-            echo "▶️ Ejecutando $name"
-            docker run --rm --network host -e API_BASE=${API_BASE} \
-              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
-              run /scripts/$name.js --summary-export=/out/$name.json || \
-              echo '{"metrics":{}}' > out/k6/$name.json
+          name=$(basename "$script" .js)
+          echo "▶️ Ejecutando $name"
+          docker run --rm --network host -e API_BASE=${API_BASE} \
+           -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
+           run /scripts/$name.js --summary-export=/out/$name.json || \
+           echo '{"metrics":{}}' > out/k6/$name.json
           done
 
-      - name: Subir artefactos k6
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: k6-summaries
-          path: out/k6
+          - name: Subir artefactos k6
+            uses: actions/upload-artifact@v4
+            if: always()
+            with:
+              name: k6-summaries
+              path: out/k6/*.json
 
-      - name: Resumen k6
-        if: always()
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq >/dev/null
-          echo "## 📈 k6 Summary" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
-          for f in out/k6/*.json; do
-            tag=$(basename "$f" .json)
-            reqs=$(jq '.metrics.http_reqs.count // 0' "$f")
-            p95=$(jq '.metrics.http_req_duration["p(95)"] // 0' "$f")
-            fail=$(jq '.metrics.http_req_failed.rate // 0' "$f")
-            printf "| %s | %s | %.2f | %.4f |\n" "$tag" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
-          done
-
+          - name: Resumen k6
+            if: always()
+            run: |
+              sudo apt-get update && sudo apt-get install -y jq >/dev/null
+              echo "## 📈 k6 Summary" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Test | Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
+              echo "|------|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
+              
+              totalReqs=0
+              totalFail=0
+              allP95=()
+              
+              for f in out/k6/*.json; do
+                tag=$(basename "$f" .json)
+                reqs=$(jq '.metrics.http_reqs.count // 0' "$f")
+                p95=$(jq '.metrics.http_req_duration["p(95)"] // 0' "$f")
+                fail=$(jq '.metrics.http_req_failed.rate // 0' "$f")
+              
+                totalReqs=$((totalReqs + reqs))
+                # acumulo fallas estimadas
+                failCount=$(echo "$reqs * $fail" | bc -l | awk '{printf "%d", $1}')
+                totalFail=$((totalFail + failCount))
+                allP95+=($p95)
+              
+                printf "| %s | %s | %.2f | %.4f |\n" "$tag" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
+              done
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### Totales" >> $GITHUB_STEP_SUMMARY
+              globalFailRate=$(echo "$totalFail / $totalReqs" | bc -l)
+              avgP95=$(printf "%.2f" $(echo "${allP95[@]}" | awk '{s=0; for(i=1;i<=NF;i++) s+=$i; print s/NF}'))
+              printf "| Total Requests | Avg p95 (ms) | Global Fail rate |\n" >> $GITHUB_STEP_SUMMARY
+              printf "|---------------:|-------------:|-----------------:|\n" >> $GITHUB_STEP_SUMMARY
+              printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
   e2e-tests:
-    name: Cypress E2E
-    runs-on: ubuntu-latest
-    needs: k6-load
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
+      name: Cypress E2E
+      runs-on: ubuntu-latest
+      needs: k6-load
+      steps:
+        - uses: actions/checkout@v4
+        - uses: actions/setup-node@v4
+          with:
+            node-version: 18
 
-      - name: Install dependencies
-        run: npm install
+        - name: Install dependencies
+          run: npm install
 
-      - name: Install node-fetch (fix Cypress config)
-        run: npm install node-fetch@2
+        - name: Install node-fetch (fix Cypress config)
+          run: npm install node-fetch@2
 
-      - name: Run Cypress tests (JSON reporter)
-        run: |
-          mkdir -p out/cypress
-          npx cypress run \
-            --env API_BASE=http://localhost:8080 \
-            --reporter json \
-            --reporter-options "output=out/cypress/results.json" \
-            || true
+        - name: Run Cypress tests (JSON reporter)
+          run: |
+            mkdir -p out/cypress
+            npx cypress run \
+              --env API_BASE=http://localhost:8080 \
+              --reporter json \
+              --reporter-options "output=out/cypress/results.json" \
+              || true
 
-      - name: Subir artefactos Cypress
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: cypress-results
-          path: out/cypress/results.json
+        - name: Subir artefactos Cypress
+          uses: actions/upload-artifact@v4
+          if: always()
+          with:
+            name: cypress-results
+            path: out/cypress/results.json
 
-      - name: Resumen Cypress
-        if: always()
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq >/dev/null
-          echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f out/cypress/results.json ]; then
-            total=$(jq '.stats.tests' out/cypress/results.json)
-            passed=$(jq '.stats.passes' out/cypress/results.json)
-            failed=$(jq '.stats.failures' out/cypress/results.json)
-            skipped=$(jq '.stats.skipped' out/cypress/results.json)
-            duration=$(jq '.stats.duration' out/cypress/results.json)
-
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
-            echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
-            echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "_No Cypress results found._" >> $GITHUB_STEP_SUMMARY
-          fi
+        - name: Resumen Cypress
+          if: always()
+          run: |
+            sudo apt-get update && sudo apt-get install -y jq >/dev/null
+            echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
+  
+            if [ -f out/cypress/results.json ]; then
+              total=$(jq '.stats.tests' out/cypress/results.json)
+              passed=$(jq '.stats.passes' out/cypress/results.json)
+              failed=$(jq '.stats.failures' out/cypress/results.json)
+              skipped=$(jq '.stats.skipped' out/cypress/results.json)
+              duration=$(jq '.stats.duration' out/cypress/results.json)
+  
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
+              echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
+              echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "_No Cypress results found._" >> $GITHUB_STEP_SUMMARY
+            fi
