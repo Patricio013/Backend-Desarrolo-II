@@ -23,5 +23,9 @@ module.exports = {
     },
     supportFile: false,
     specPattern: "src/test/java/com/example/demo/cypress/e2e/**/*.cy.{js,jsx,ts,tsx}",
+    reporter: 'json',
+    reporterOptions: {
+      output: 'out/cypress/results.json'
+    }
   }
 }

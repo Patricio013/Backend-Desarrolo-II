@@ -296,21 +296,17 @@ jobs:
       - name: Install node-fetch (fix Cypress config)
         run: npm install node-fetch@2
 
-      - name: Run Cypress tests (JSON reporter)
+      - name: Run Cypress tests
         run: |
           mkdir -p out/cypress
-          npx cypress run \
-          --env API_BASE=http://localhost:8080 \
-          --reporter json \
-          --reporter-options "output=out/cypress/results.json" \
-          || true
+          npx cypress run || true
 
       - name: Subir artefactos Cypress
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: cypress-results
-          path: out/cypress/results.json
+          path: out/cypress
 
       - name: Resumen Cypress
         if: always()

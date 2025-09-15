@@ -1,6 +1,7 @@
 {
   "devDependencies": {
     "cypress": "^13.17.0",
+    "cypress-json-results": "^1.5.0",
     "start-server-and-test": "^2.1.0"
   },
   "scripts": {
