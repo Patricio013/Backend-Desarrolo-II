@@ -13,7 +13,7 @@ public class SolicitudesCreadasDTO {
     private Long usuarioId;
  
     @JsonProperty("rubro")
-    private String rubro;
+    private Long rubro;
 
     @JsonProperty("descripcion")
     private String descripcion;
