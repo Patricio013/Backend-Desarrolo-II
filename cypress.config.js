@@ -21,6 +21,7 @@ module.exports = {
     env: {
       API_BASE: 'http://localhost:8080'
     },
-    supportFile: false
+    supportFile: false,
+    specPattern: "test/cypress.e2e/**/*.cy.{js,jsx,ts,tsx}"
   }
 }
