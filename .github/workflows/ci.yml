@@ -143,7 +143,7 @@ jobs:
         if: always()
         with:
           name: k6-summaries
-          path: out/k6/*.json
+          path: out/k6
 
       - name: Resumen k6
         if: always()
