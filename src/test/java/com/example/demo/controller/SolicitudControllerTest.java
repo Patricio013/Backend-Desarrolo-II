@@ -68,6 +68,7 @@ class SolicitudControllerTest {
     @Test
     void recotizar_ok() {
         controller.recotizarSolicitud(7L);
+
         verify(service).recotizar(7L);
     }
 
