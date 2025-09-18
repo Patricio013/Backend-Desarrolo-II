@@ -198,50 +198,7 @@ jobs:
               echo '{"metrics":{}}' > out/k6/$name.json
           done
 
-      - name: Subir artefactos k6
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: k6-summaries
-          path: out/k6/*.json
-
-      - name: Resumen k6
-        if: always()
-        run: |
-          sudo apt-get update && sudo apt-get install -y jq >/dev/null
-          echo "## 📈 k6 Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test | Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
-          
-          totalReqs=0
-          totalFail=0
-          allP95=()
-          
-          for f in out/k6/*.json; do
-            tag=$(basename "$f" .json)
-            reqs=$(jq '.metrics.http_reqs.count // 0' "$f")
-            p95=$(jq '.metrics.http_req_duration["p(95)"] // 0' "$f")
-            fail=$(jq '.metrics.http_req_failed.rate // 0' "$f")
-          
-            totalReqs=$((totalReqs + reqs))
-            # acumulo fallas estimadas
-            failCount=$(echo "$reqs * $fail" | bc -l | awk '{printf "%d", $1}')
-            totalFail=$((totalFail + failCount))
-            allP95+=($p95)
-          
-            printf "| %s | %s | %.2f | %.4f |\n" "$tag" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
-          done
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Totales" >> $GITHUB_STEP_SUMMARY
-          globalFailRate=$(echo "$totalFail / $totalReqs" | bc -l)
-          avgP95=$(printf "%.2f" $(echo "${allP95[@]}" | awk '{s=0; for(i=1;i<=NF;i++) s+=$i; print s/NF}'))
-          printf "| Total Requests | Avg p95 (ms) | Global Fail rate |\n" >> $GITHUB_STEP_SUMMARY
-          printf "|---------------:|-------------:|-----------------:|\n" >> $GITHUB_STEP_SUMMARY
-          printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
-          
-
+      
   e2e-tests:
     name: Cypress E2E
     runs-on: ubuntu-latest
@@ -296,14 +253,9 @@ jobs:
       - name: Install node-fetch (fix Cypress config)
         run: npm install node-fetch@2
 
-      - name: Run Cypress tests
-        run: |
-          mkdir -p out/cypress
-          npx cypress run \
-            --env API_BASE=http://localhost:8080 \
-            --reporter json \
-            --reporter-options "output=out/cypress/results.json,overwrite=true" \
-            || true
+      - name: Run Cypress
+        run: npx cypress run --reporter mochawesome --reporter-options reportDir=cypress/results,overwrite=false,html=false,json=true
+
   
 
       - name: Debug Cypress output
@@ -319,11 +271,12 @@ jobs:
           name: cypress-results
           path: out/cypress
 
-      - name: Cypress Summary Table
+      - name: Cypress Summary
         run: |
           total=$(jq '.stats.tests' results.json)
           passed=$(jq '.stats.passes' results.json)
           failed=$(jq '.stats.failures' results.json)
+
           echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
