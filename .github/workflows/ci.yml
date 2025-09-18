@@ -319,29 +319,13 @@ jobs:
           name: cypress-results
           path: out/cypress
 
-      - name: Resumen Cypress
-        if: always()
+      - name: Cypress Summary Table
         run: |
-          sudo apt-get update && sudo apt-get install -y jq >/dev/null
-          echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-
-          if [ -f out/cypress/results.json ]; then
-            total=$(jq '.stats.tests' out/cypress/results.json)
-            passed=$(jq '.stats.passes' out/cypress/results.json)
-            failed=$(jq '.stats.failures' out/cypress/results.json)
-            skipped=$(jq '.stats.pending' out/cypress/results.json)
-            duration=$(jq '.stats.duration' out/cypress/results.json)
-
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
-            echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
-            echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
-
-            if [ "$failed" -gt 0 ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
-              jq -r '.failures[]?.fullTitle' out/cypress/results.json | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
-            fi
-          else
-            echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
-          fi
+          total=$(jq '.stats.tests' results.json)
+          passed=$(jq '.stats.passes' results.json)
+          failed=$(jq '.stats.failures' results.json)
+          echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| $total | $passed ✅ | $failed ❌ |" >> $GITHUB_STEP_SUMMARY
