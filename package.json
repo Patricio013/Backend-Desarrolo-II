@@ -5,6 +5,7 @@
     "mochawesome": "^7.1.4",
     "mochawesome-merge": "^5.0.0",
     "mochawesome-report-generator": "^6.3.0",
+    "node-fetch": "^2.7.0",
     "start-server-and-test": "^2.1.0"
   },
   "scripts": {
