@@ -26,8 +26,7 @@ import java.util.*;
 @RequiredArgsConstructor
 public class SolicitudController {
 
-    @Autowired
-    private SolicitudService solicitudService;
+    private final SolicitudService solicitudService;
     private final CotizacionService cotizacionService;
 
     /**
