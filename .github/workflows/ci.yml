@@ -48,6 +48,7 @@ jobs:
           if [ ${#REPORTS[@]} -eq 0 ]; then
             echo "_No se encontraron reportes JUnit (¿se ejecutaron tests?)._" >> $GITHUB_STEP_SUMMARY
             exit 0
+
           fi
           totals=$(awk -F'"' '
             /<testsuite / {
