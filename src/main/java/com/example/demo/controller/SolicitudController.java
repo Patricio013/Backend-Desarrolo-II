@@ -22,7 +22,7 @@ import java.util.*;
 
 
 @RestController
-@RequestMapping("/api/solicitudes")
+@RequestMapping("/solicitudes")
 @RequiredArgsConstructor
 public class SolicitudController {
 
