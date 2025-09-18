@@ -102,15 +102,9 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      
-  name: E2E Tests
+    
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
 
-jobs:
   e2e-tests:
     runs-on: ubuntu-latest
     steps:
