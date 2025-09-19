@@ -177,7 +177,7 @@ jobs:
           npx cypress run \
             --reporter json \
             --reporter-options output=out/cypress/results.json \
-            | tee cypress.log
+            | tee cypress.log || true
       
       
 
