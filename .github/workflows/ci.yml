@@ -191,26 +191,22 @@ jobs:
             cypress.log
             cypress/videos
 
-      - name: Cypress Summary (logs simplificados)
+      - name: Cypress Clean Summary
         if: always()
         run: |
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Saco colores ANSI
+          # Limpio colores ANSI
           clean_log=$(sed 's/\x1b\[[0-9;]*m//g' cypress.log)
 
-          # Extraigo métricas principales
-          echo "### Totales" >> $GITHUB_STEP_SUMMARY
-          echo "$clean_log" | grep -E "Tests:|Passing:|Failing:|Pending:|Skipped:" >> $GITHUB_STEP_SUMMARY
+          # Extraigo la sección final después de "(Run Finished)"
+          summary=$(echo "$clean_log" | sed -n '/(Run Finished)/,$p')
 
-          echo "" >> $GITHUB_STEP_SUMMARY
+          # Me quedo sólo con la tabla de specs y la línea de totales
           echo "### Specs" >> $GITHUB_STEP_SUMMARY
-          echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
-          echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
-          echo "$clean_log" | grep -E "✔|✖" | awk '{printf "| %s | %s | %s | %s |\n",$2,$3,$4,$5}' >> $GITHUB_STEP_SUMMARY
+          echo "$summary" | grep -E "✔|✖" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Screenshots" >> $GITHUB_STEP_SUMMARY
-          echo "$clean_log" | grep "cypress/screenshots" | sed 's/.*cypress/cypress/' >> $GITHUB_STEP_SUMMARY
-      
+          echo "### Totales" >> $GITHUB_STEP_SUMMARY
+          echo "$summary" | grep -E "failed" >> $GITHUB_STEP_SUMMARY
