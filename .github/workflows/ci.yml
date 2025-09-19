@@ -175,7 +175,7 @@ jobs:
         run: |
           mkdir -p out/cypress
           npx cypress run \
-            --reporter json \
+            --reporter mocha-json-reporter \
             --reporter-options output=out/cypress/results.json \
             | tee cypress.log || true
       
