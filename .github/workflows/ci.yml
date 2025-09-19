@@ -174,16 +174,12 @@ jobs:
       - name: Run Cypress
         run: |
           mkdir -p out/cypress
-          npx cypress run --reporter json --reporter-options output=out/cypress/results.json | tee cypress.log
-          tail -n 50 cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+          npx cypress run \
+            --reporter json \
+            --reporter-options output=out/cypress/results.json \
+            --no-color | tee cypress.log
       
       
-
-      - name: Debug Cypress output
-        if: always()
-        run: |
-          echo "Buscando results.json en todo el repo..."
-          find . -type f -name "results.json"
 
       - name: Subir artefactos Cypress
         uses: actions/upload-artifact@v4
@@ -193,16 +189,22 @@ jobs:
           path: |
             out/cypress/results.json
             cypress.log
-            cypress/screenshots
             cypress/videos
 
-      - name: Cypress Summary Table
+      - name: Cypress Summary
+        if: always()
         run: |
-          total=$(jq '.stats.tests' results.json)
-          passed=$(jq '.stats.passes' results.json)
-          failed=$(jq '.stats.failures' results.json)
-          echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| $total | $passed ✅ | $failed ❌ |" >> $GITHUB_STEP_SUMMARY
+          if [ -f out/cypress/results.json ]; then
+            total=$(jq '.stats.tests' out/cypress/results.json)
+            passed=$(jq '.stats.passes' out/cypress/results.json)
+            failed=$(jq '.stats.failures' out/cypress/results.json)
+
+            echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| $total | $passed ✅ | $failed ❌ |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No se generó results.json, mostrando últimos logs:" >> $GITHUB_STEP_SUMMARY
+            tail -n 50 cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+          fi
