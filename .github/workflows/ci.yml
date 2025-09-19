@@ -174,7 +174,7 @@ jobs:
       - name: Run Cypress
         run: |
           mkdir -p out/cypress
-          npx cypress run --reporter json --reporter-options output=out/cypress/results.json --no-color | tee cypress.log
+          npx cypress run --reporter json --reporter-options output=out/cypress/results.json | tee cypress.log
           tail -n 50 cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
       
       
