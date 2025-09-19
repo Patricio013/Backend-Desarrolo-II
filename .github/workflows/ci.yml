@@ -298,8 +298,9 @@ jobs:
 
       - name: Run Cypress
         run: |
-          npx cypress run | tee cypress.log
+          npx cypress run --reporter json --reporter-options output=results.json | tee cypress.log
           tail -n 50 cypress.log >> $GITHUB_STEP_SUMMARY
+
   
 
       - name: Debug Cypress output
