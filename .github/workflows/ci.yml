@@ -173,10 +173,11 @@ jobs:
 
       - name: Run Cypress
         run: |
-          npx cypress run --reporter json --reporter-options output=results.json | tee cypress.log
-          tail -n 50 cypress.log >> $GITHUB_STEP_SUMMARY
-
-  
+          mkdir -p out/cypress
+          npx cypress run --reporter json --reporter-options output=out/cypress/results.json --no-color | tee cypress.log
+          tail -n 50 cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+      
+      
 
       - name: Debug Cypress output
         if: always()
@@ -189,7 +190,11 @@ jobs:
         if: always()
         with:
           name: cypress-results
-          path: out/cypress
+          path: |
+            out/cypress/results.json
+            cypress.log
+            cypress/screenshots
+            cypress/videos
 
       - name: Cypress Summary Table
         run: |
