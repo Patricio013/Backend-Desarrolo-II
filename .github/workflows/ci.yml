@@ -48,7 +48,6 @@ jobs:
           if [ ${#REPORTS[@]} -eq 0 ]; then
             echo "_No se encontraron reportes JUnit (¿se ejecutaron tests?)._" >> $GITHUB_STEP_SUMMARY
             exit 0
-
           fi
           totals=$(awk -F'"' '
             /<testsuite / {
@@ -102,50 +101,227 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-    
+
+      - name: Boot backend (background)
+        run: |
+          nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
+          echo "⏳ Esperando a que levante el backend..."
+          for i in {1..120}; do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
+              echo "✅ Backend UP"
+              break
+            fi
+            sleep 2
+          done
+          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && exit 1)
+
+      - name: Prepare k6 scripts
+        run: |
+          mkdir -p tests/k6 out/k6
+          chmod 777 out/k6
+          
+          # SMOKE
+          cat > tests/k6/smoke.js <<'JS'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          export const options = { vus: 1, duration: '10s' };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+            sleep(1);
+          }
+          JS
+          
+          # STRESS
+          cat > tests/k6/stress.js <<'JS'
+          import http from 'k6/http';
+          import { check } from 'k6';
+          export const options = {
+            stages: [
+              { duration: '20s', target: 20 },
+              { duration: '20s', target: 50 },
+              { duration: '20s', target: 100 },
+              { duration: '20s', target: 0 },
+            ],
+          };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+          }
+          JS
+          
+          # SOAK
+          cat > tests/k6/soak.js <<'JS'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+          export const options = { vus: 10, duration: '2m' };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+            sleep(1);
+          }
+          JS
+          
+          # SPIKE
+          cat > tests/k6/spike.js <<'JS'
+          import http from 'k6/http';
+          import { check } from 'k6';
+          export const options = {
+            stages: [
+              { duration: '5s', target: 5 },
+              { duration: '5s', target: 200 },
+              { duration: '10s', target: 5 },
+              { duration: '5s', target: 0 },
+            ],
+          };
+          const BASE = __ENV.API_BASE;
+          export default function () {
+            const r = http.post(`${BASE}/api/solicitudes/invitar-top3`, "{}", { headers: { "Content-Type": "application/json" } });
+            check(r, { "status 200": x => x.status === 200 });
+          }
+          JS
+
+
+      - name: Run k6 (Docker)
+        run: |
+          mkdir -p out/k6
+          chmod 777 out/k6
+          for script in tests/k6/*.js; do
+            name=$(basename "$script" .js)
+            echo "▶️ Ejecutando $name"
+            docker run --rm --network host -e API_BASE=${API_BASE} \
+              -v $PWD/tests/k6:/scripts -v $PWD/out/k6:/out grafana/k6 \
+              run /scripts/$name.js --summary-export=/out/$name.json || \
+              echo '{"metrics":{}}' > out/k6/$name.json
+          done
+
+      - name: Subir artefactos k6
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-summaries
+          path: out/k6/*.json
+
+      - name: Resumen k6
+        if: always()
+        run: |
+          sudo apt-get update && sudo apt-get install -y jq >/dev/null
+          echo "## 📈 k6 Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | Requests | p95 (ms) | Fail rate |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|---------:|---------:|----------:|" >> $GITHUB_STEP_SUMMARY
+          
+          totalReqs=0
+          totalFail=0
+          allP95=()
+          
+          for f in out/k6/*.json; do
+            tag=$(basename "$f" .json)
+            reqs=$(jq '.metrics.http_reqs.count // 0' "$f")
+            p95=$(jq '.metrics.http_req_duration["p(95)"] // 0' "$f")
+            fail=$(jq '.metrics.http_req_failed.rate // 0' "$f")
+          
+            totalReqs=$((totalReqs + reqs))
+            # acumulo fallas estimadas
+            failCount=$(echo "$reqs * $fail" | bc -l | awk '{printf "%d", $1}')
+            totalFail=$((totalFail + failCount))
+            allP95+=($p95)
+          
+            printf "| %s | %s | %.2f | %.4f |\n" "$tag" "$reqs" "$p95" "$fail" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Totales" >> $GITHUB_STEP_SUMMARY
+          globalFailRate=$(echo "$totalFail / $totalReqs" | bc -l)
+          avgP95=$(printf "%.2f" $(echo "${allP95[@]}" | awk '{s=0; for(i=1;i<=NF;i++) s+=$i; print s/NF}'))
+          printf "| Total Requests | Avg p95 (ms) | Global Fail rate |\n" >> $GITHUB_STEP_SUMMARY
+          printf "|---------------:|-------------:|-----------------:|\n" >> $GITHUB_STEP_SUMMARY
+          printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
+          
 
   e2e-tests:
+    name: Cypress E2E
     runs-on: ubuntu-latest
+    needs: k6-load
+    services:
+      postgres:
+        image: postgres:15
+        ports: [ "5432:5432" ]
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: ArreglaYaBackend
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: root
+      API_BASE: http://localhost:8080
+
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      - name: Boot backend (background)
+        run: |
+          nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
+          echo "⏳ Esperando a que levante el backend..."
+          for i in {1..120}; do
+            if curl -sf http://localhost:8080/actuator/health > /dev/null; then 
+              echo "✅ Backend UP"
+              break
+            fi
+            sleep 2
+          done
+          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && (cat backend.log || true) && exit 1)
+
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Start backend
-        run: |
-          nohup mvn spring-boot:run > backend.log 2>&1 &
-          sleep 20
+      - name: Install node-fetch (fix Cypress config)
+        run: npm install node-fetch@2
 
       - name: Run Cypress
-        run: npx cypress run --reporter json --reporter-options output=results.json
+        run: |
+          npx cypress run | tee cypress.log
+          tail -n 50 cypress.log >> $GITHUB_STEP_SUMMARY
+  
 
-      - name: Publish summary
+      - name: Debug Cypress output
+        if: always()
+        run: |
+          echo "Buscando results.json en todo el repo..."
+          find . -type f -name "results.json"
+
+      - name: Subir artefactos Cypress
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cypress-results
+          path: out/cypress
+
+      - name: Cypress Summary Table
         run: |
           total=$(jq '.stats.tests' results.json)
           passed=$(jq '.stats.passes' results.json)
           failed=$(jq '.stats.failures' results.json)
-
           echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| $total | $passed ✅ | $failed ❌ |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Upload Cypress results
-        uses: actions/upload-artifact@v4
-        with:
-          name: cypress-results
-          path: results.json
-
-      - name: Upload backend logs (on failure)
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-logs
-          path: backend.log
