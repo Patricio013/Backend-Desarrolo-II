@@ -191,20 +191,9 @@ jobs:
             cypress.log
             cypress/videos
 
-      - name: Cypress Summary
+      - name: Cypress Final Summary
         if: always()
         run: |
-          if [ -f out/cypress/results.json ]; then
-            total=$(jq '.stats.tests' out/cypress/results.json)
-            passed=$(jq '.stats.passes' out/cypress/results.json)
-            failed=$(jq '.stats.failures' out/cypress/results.json)
-
-            echo "## 🧪 Cypress Test Results" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Total | Passed | Failed |" >> $GITHUB_STEP_SUMMARY
-            echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
-            echo "| $total | $passed ✅ | $failed ❌ |" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ No se generó results.json, mostrando últimos logs:" >> $GITHUB_STEP_SUMMARY
-            tail -n 50 cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
+          sed -n '/(Run Finished)/,$p' cypress.log | sed 's/\x1b\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+      
