@@ -201,13 +201,23 @@ jobs:
 
           # Extraigo métricas principales
           echo "### Totales" >> $GITHUB_STEP_SUMMARY
-          echo "$clean_log" | grep -E "Tests:|Passing:|Failing:|Pending:|Skipped:" >> $GITHUB_STEP_SUMMARY
-
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Specs" >> $GITHUB_STEP_SUMMARY
-          echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
-          echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
-          echo "$clean_log" | grep -E "✔|✖" | awk '{printf "| %s | %s | %s | %s |\n",$2,$3,$4,$5}' >> $GITHUB_STEP_SUMMARY
-
+          echo "| Tests | Passing | Failing | Pending | Skipped |" >> $GITHUB_STEP_SUMMARY
+          echo "|------:|--------:|--------:|--------:|--------:|" >> $GITHUB_STEP_SUMMARY
+          
+          tests=$(echo "$clean_log"   | grep "Tests:"    | awk '{print $2}')
+          passing=$(echo "$clean_log" | grep "Passing:"  | awk '{print $2}')
+          failing=$(echo "$clean_log" | grep "Failing:"  | awk '{print $2}')
+          pending=$(echo "$clean_log" | grep "Pending:"  | awk '{print $2}')
+          skipped=$(echo "$clean_log" | grep "Skipped:"  | awk '{print $2}')
+          
+          echo "| $tests | $passing | $failing | $pending | $skipped |" >> $GITHUB_STEP_SUMMARY
+          
           echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "### Specs" >> $GITHUB_STEP_SUMMARY
+                  echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
+                  echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
+                  echo "$clean_log" | grep -E "✔|✖" | awk '{printf "| %s | %s | %s | %s |\n",$2,$3,$4,$5}' >> $GITHUB_STEP_SUMMARY
+        
+                  echo "" >> $GITHUB_STEP_SUMMARY
 
