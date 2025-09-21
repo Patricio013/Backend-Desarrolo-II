@@ -70,8 +70,9 @@ public class SolicitudController {
     }
 
     @PutMapping("path/{id}/recotizar")
-    public void recotizarSolicitud(@PathVariable Long id) {
-        solicitudService.recotizar(id);
+    public ResponseEntity<SolicitudTop3Resultado> recotizarSolicitud(@PathVariable Long id) {
+        SolicitudTop3Resultado resultado = solicitudService.recotizar(id);
+        return ResponseEntity.ok(resultado);
     }
 
     // com.example.demo.controller.SolicitudController.java
