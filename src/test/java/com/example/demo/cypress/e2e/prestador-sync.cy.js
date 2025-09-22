@@ -8,8 +8,10 @@ describe('PrestadorSyncController', () => {
   it('upsert de un prestador', () => {
     cy.request('POST', url, {
       id: 1,
-      nombre: "Juan Perez"
-    }).then((res) => {
+      nombre: "Juan Perez",
+      email: "juan@test.com",
+      telefono: "123456789"
+    }).then(res => {
       expect(res.status).to.eq(200)
       expect(res.body).to.eq("ok")
     })
@@ -17,15 +19,15 @@ describe('PrestadorSyncController', () => {
 
   it('upsert batch prestadores', () => {
     cy.request('POST', `${url}/batch`, [
-      { id: 1, nombre: "Juan" },
-      { id: 2, nombre: "Maria" }
-    ]).then((res) => {
+      { id: 1, nombre: "Juan", email: "juan@test.com", telefono: "123" },
+      { id: 2, nombre: "Maria", email: "maria@test.com", telefono: "456" }
+    ]).then(res => {
       expect(res.status).to.eq(200)
       expect(res.body).to.eq("ok")
     })
   })
 
-  it('rechaza batch inválido (ej: nombre null)', () => {
+  it('rechaza batch inválido', () => {
     cy.request({
       method: 'POST',
       url: `${url}/batch`,
