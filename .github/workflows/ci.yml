@@ -69,51 +69,6 @@ jobs:
           echo "| $T | $F | $E | $S |" >> $GITHUB_STEP_SUMMARY
           echo "📂 Archivos analizados: ${#REPORTS[@]}" >> $GITHUB_STEP_SUMMARY
 
-  k6-load:
-    name: k6 (smoke/stress/soak/spike)
-    runs-on: ubuntu-latest
-    needs: backend-tests
-    services:
-      postgres:
-        image: postgres:15
-        ports: [ "5432:5432" ]
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: root
-          POSTGRES_DB: ArreglaYaBackend
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-    env:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: root
-      API_BASE: http://localhost:8080
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Boot backend (background)
-        run: |
-          nohup mvn -DskipTests spring-boot:run > backend.log 2>&1 &
-          echo "⏳ Esperando a que levante el backend..."
-          for i in {1..120}; do
-            if curl -sf http://localhost:8080/actuator/health > /dev/null; then
-              echo "✅ Backend UP"
-              break
-            fi
-            sleep 2
-          done
-          curl -s http://localhost:8080/actuator/health || (echo "❌ Backend no inició" && exit 1)
 
   k6-load:
     name: k6 (smoke/stress/soak/spike)
