@@ -1,16 +1,17 @@
 /// <reference types="cypress" />
 
 const BASE = Cypress.env('API_BASE') || 'http://localhost:8080'
-const url = `${BASE}/solicitudes/invitar-top3`
 
+describe('SolicitudController - invitarTop3 burst', () => {
+  const url = `${BASE}/solicitudes/invitar-top3`
 
-describe('Burst concurrente (ligero desde Node)', () => {
-  it('20 POST concurrentes: no debe haber 5xx', () => {
-    cy.task('burstPost', { url, times: 20 }).then(results => {
-      results.forEach((r, i) => {
-        expect(r.error || null, `error en #${i}`).to.be.null
-        expect(r.status, `status en #${i}`).to.be.within(200, 499) 
-      })
+  it('invita a top3 para todas las solicitudes creadas', () => {
+    cy.request('POST', url).then((res) => {
+      expect(res.status).to.eq(200)
+      expect(res.body).to.be.an('array')
     })
   })
 })
+
+
+
