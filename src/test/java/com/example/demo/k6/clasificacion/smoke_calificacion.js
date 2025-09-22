@@ -9,7 +9,7 @@ export default function () {
         { id: 1, puntaje: 5, comentario: "Excelente" }
     ]);
 
-    const res = http.post(`${BASE}/api/prestadores/calificaciones`, payload, {
+    const res = http.post(`${BASE}/prestadores/calificaciones`, payload, {
         headers: { "Content-Type": "application/json" },
     });
 

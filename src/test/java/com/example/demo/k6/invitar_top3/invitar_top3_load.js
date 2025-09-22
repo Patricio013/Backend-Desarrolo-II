@@ -26,7 +26,7 @@ export const options = {
 const BASE = __ENV.API_BASE || 'http://localhost:8080'
 
 export default function () {
-  const url = `${BASE}/api/solicitudes/invitar-top3`
+  const url = `${BASE}/solicitudes/invitar-top3`
   const res = http.post(url, JSON.stringify({}), {
     headers: { 'Content-Type': 'application/json' },
   })

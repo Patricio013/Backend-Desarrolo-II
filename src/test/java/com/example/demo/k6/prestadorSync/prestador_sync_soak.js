@@ -6,10 +6,10 @@ const BASE = __ENV.API_BASE;
 
 export default function () {
     const prestador = JSON.stringify({ id: Math.floor(Math.random() * 1000), nombre: "Soak Test", rubro: "Carpintero" });
-    let res = http.post(`${BASE}/api/prestadores-sync`, prestador, {
+    let res = http.post(`${BASE}/prestadores-sync`, prestador, {
         headers: { "Content-Type": "application/json" },
     });
-    check(res, { "POST /api/prestadores-sync -> 200": r => r.status === 200 });
+    check(res, { "POST /prestadores-sync -> 200": r => r.status === 200 });
 
     sleep(1);
 }

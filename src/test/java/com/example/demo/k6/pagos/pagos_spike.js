@@ -14,11 +14,11 @@ const BASE = __ENV.API_BASE;
 export default function () {
     const payload = JSON.stringify({ monto: 999, descripcion: "Spike test" });
 
-    let res = http.post(`${BASE}/api/pagos`, payload, {
+    let res = http.post(`${BASE}/pagos`, payload, {
         headers: { "Content-Type": "application/json" },
     });
-    check(res, { "POST /api/pagos -> 200": r => r.status === 200 });
+    check(res, { "POST /pagos -> 200": r => r.status === 200 });
 
-    res = http.get(`${BASE}/api/pagos/ultimas`);
-    check(res, { "GET /api/pagos/ultimas -> 200": r => r.status === 200 });
+    res = http.get(`${BASE}/pagos/ultimas`);
+    check(res, { "GET /pagos/ultimas -> 200": r => r.status === 200 });
 }

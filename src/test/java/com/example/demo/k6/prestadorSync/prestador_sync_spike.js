@@ -18,8 +18,8 @@ export default function () {
         rubro: "Jardinero"
     });
 
-    let res = http.post(`${BASE}/api/prestadores-sync`, prestador, {
+    let res = http.post(`${BASE}/prestadores-sync`, prestador, {
         headers: { "Content-Type": "application/json" },
     });
-    check(res, { "POST /api/prestadores-sync -> 200": r => r.status === 200 });
+    check(res, { "POST /prestadores-sync -> 200": r => r.status === 200 });
 }

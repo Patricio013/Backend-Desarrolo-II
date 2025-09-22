@@ -18,6 +18,6 @@ const BASE_URL = __ENV.API_BASE || 'http://localhost:8080';
 const HEADERS = { 'Content-Type': 'application/json' };
 
 export default function () {
-  const r = http.post(`${BASE_URL}/api/solicitudes/invitar-top3`, "{}", { headers: HEADERS });
+  const r = http.post(`${BASE_URL}/solicitudes/invitar-top3`, "{}", { headers: HEADERS });
   check(r, { '200': x => x.status === 200 });
 }

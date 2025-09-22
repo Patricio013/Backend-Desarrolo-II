@@ -14,7 +14,7 @@ const BASE = __ENV.API_BASE;
 export default function () {
     const payload = JSON.stringify([{ id: 2, puntaje: 3, comentario: "Regular" }]);
 
-    const res = http.post(`${BASE}/api/prestadores/calificaciones`, payload, {
+    const res = http.post(`${BASE}/prestadores/calificaciones`, payload, {
         headers: { "Content-Type": "application/json" },
     });
 
