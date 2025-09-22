@@ -7,13 +7,15 @@ describe("SolicitudController", () => {
   let solicitudId;
 
   before(() => {
-    // Crear prestador para los tests de cotización/asignación
+    // Crear prestador válido para los tests de cotización/asignación
     cy.request("POST", `${BASE}/prestadores-sync`, {
       id: 99,
       nombre: "Prestador Test",
       email: "prestador@test.com",
       telefono: "111111111",
       rubro: "Electricista",
+      cuit: "20-99999999-9",
+      direccion: "Zona Industrial 100"
     });
   });
 
@@ -22,6 +24,8 @@ describe("SolicitudController", () => {
       {
         descripcion: "Setup test",
         rubro: "Electricista",
+        usuarioId: 5,
+        direccion: "Test Street 50"
       },
     ]).then((res) => {
       solicitudId = res.body[0].id;

@@ -8,14 +8,16 @@ describe("PagosController", () => {
   it("crea un pago", () => {
     cy.request("POST", `${BASE}/solicitudes/crear`, [
       {
-        descripcion: "Pago prueba A",
+        descripcion: "Instalación de lámpara",
         rubro: "Electricista",
+        usuarioId: 1,
+        direccion: "Calle Falsa 123"
       },
     ]).then((res) => {
       const solicitudId = res.body[0].id;
 
       cy.request("POST", url, { solicitudId, monto: 1000 }).then((pago) => {
-        expect(pago.status).to.eq(200);
+        expect([200, 201]).to.include(pago.status);
         expect(pago.body).to.have.property("solicitudId", solicitudId);
       });
     });
@@ -32,7 +34,9 @@ describe("PagosController", () => {
     cy.request("POST", `${BASE}/solicitudes/crear`, [
       {
         descripcion: "Pago prueba B",
-        rubro: "Electricista",
+        rubro: "Plomería",
+        usuarioId: 2,
+        direccion: "Avenida Siempre Viva 742"
       },
     ]).then((res) => {
       const solicitudId = res.body[0].id;

@@ -12,6 +12,8 @@ describe("PrestadorSyncController", () => {
       email: "juan@test.com",
       telefono: "123456789",
       rubro: "Electricista",
+      cuit: "20-12345678-9",
+      direccion: "Calle Real 456"
     }).then((res) => {
       expect(res.status).to.eq(200);
       expect(res.body).to.eq("ok");
@@ -26,6 +28,8 @@ describe("PrestadorSyncController", () => {
         email: "juan@test.com",
         telefono: "123",
         rubro: "Gasista",
+        cuit: "20-87654321-0",
+        direccion: "Ruta 8 Km 32"
       },
       {
         id: 2,
@@ -33,6 +37,8 @@ describe("PrestadorSyncController", () => {
         email: "maria@test.com",
         telefono: "456",
         rubro: "Plomería",
+        cuit: "27-11223344-5",
+        direccion: "Boulevard Central 55"
       },
     ]).then((res) => {
       expect(res.status).to.eq(200);
