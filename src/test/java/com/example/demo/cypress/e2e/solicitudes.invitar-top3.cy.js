@@ -20,8 +20,8 @@ function expectInvitarTop3Shape(body) {
   })
 }
 
-describe('POST /api/solicitudes/invitar-top3', () => {
-  const url = `${BASE}/api/solicitudes/invitar-top3`
+describe('POST /solicitudes/invitar-top3', () => {
+  const url = `${BASE}/solicitudes/invitar-top3`
 
   it('200 y retorna una lista con contrato válido', () => {
     cy.request('POST', url).then(res => {

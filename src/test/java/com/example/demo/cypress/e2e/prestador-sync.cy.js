@@ -3,27 +3,26 @@
 const BASE = Cypress.env('API_BASE') || 'http://localhost:8080'
 
 describe('PrestadorSyncController', () => {
-    const url = `${BASE}/api/prestadores-sync`
+    const url = `${BASE}/prestadores-sync`
 
-    it('POST /api/prestadores-sync — upsert único devuelve 200', () => {
-        const dto = { id: 101, nombre: 'Carlos Sync' }
-
-        cy.request('POST', url, dto).then(res => {
-            expect(res.status).to.eq(200)
-            expect(res.body).to.equal('ok')
-        })
+    it('upsert de un prestador', () => {
+    cy.request('POST', '/prestadores-sync', {
+        id: 1,
+        nombre: "Juan Perez"
+    }).then((res) => {
+        expect(res.status).to.eq(200)
+        expect(res.body).to.eq("ok")
+    })
     })
 
-    it('POST /api/prestadores-sync/batch — inserta lista', () => {
-        const dtos = [
-            { id: 102, nombre: 'María Sync' },
-            { id: 103, nombre: 'José Sync' }
-        ]
-
-        cy.request('POST', `${url}/batch`, dtos).then(res => {
-            expect(res.status).to.eq(200)
-            expect(res.body).to.equal('ok')
-        })
+    it('upsert batch prestadores', () => {
+    cy.request('POST', '/prestadores-sync/batch', [
+        { id: 1, nombre: "Juan" },
+        { id: 2, nombre: "Maria" }
+    ]).then((res) => {
+        expect(res.status).to.eq(200)
+        expect(res.body).to.eq("ok")
+    })
     })
 
     it('rechaza batch inválido (ej: nombre null)', () => {

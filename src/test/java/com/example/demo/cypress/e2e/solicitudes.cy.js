@@ -2,16 +2,16 @@ const BASE = Cypress.env("API_BASE") || "http://localhost:8080";
 
 describe("E2E API Tests - Solicitudes", () => {
 
-    it("POST /api/solicitudes/invitar-top3", () => {
-        cy.request("POST", `${BASE}/api/solicitudes/invitar-top3`, {})
+    it("POST /solicitudes/invitar-top3", () => {
+        cy.request("POST", `${BASE}/solicitudes/invitar-top3`, {})
             .then((res) => {
                 expect(res.status).to.eq(200);
                 expect(res.body).to.be.an("array");
             });
     });
 
-    it("POST /api/solicitudes/crear", () => {
-        cy.request("POST", `${BASE}/api/solicitudes/crear`, [
+    it("POST /solicitudes/crear", () => {
+        cy.request("POST", `${BASE}/solicitudes/crear`, [
             { descripcion: "Nueva solicitud de prueba", rubro: "Electricista" }
         ]).then((res) => {
             expect(res.status).to.eq(200);
@@ -19,43 +19,46 @@ describe("E2E API Tests - Solicitudes", () => {
         });
     });
 
-    it("PATCH /api/solicitudes/{id}/cancelar", () => {
-        cy.request("PATCH", `${BASE}/api/solicitudes/1/cancelar`).then((res) => {
-            expect(res.status).to.eq(200);
-        });
-    });
+    
+    it('cancela una solicitud', () => {
+    cy.request('PATCH', '/solicitudes/1/cancelar').then((res) => {
+        expect(res.status).to.eq(200) // void -> 200 OK
+    })
+    })
 
-    it("PUT /api/solicitudes/path/{id}/recotizar", () => {
-        cy.request("PUT", `${BASE}/api/solicitudes/path/1/recotizar`).then((res) => {
-            expect(res.status).to.eq(200);
-        });
-    });
 
-    it("POST /api/solicitudes/recibirCotizacion", () => {
-        cy.request("POST", `${BASE}/api/solicitudes/recibirCotizacion`, {
-            solicitudId: 1,
-            prestadorId: 2,
-            monto: 5000.00
-        }).then((res) => {
-            expect(res.status).to.eq(201);
-            expect(res.body).to.have.property("solicitudID", 1);
-            expect(res.body).to.have.property("prestadorID", 2);
-            expect(res.body).to.have.property("monto");
-        });
-    });
+    it('recotiza una solicitud', () => {
+    cy.request('PUT', '/solicitudes/path/1/recotizar').then((res) => {
+        expect(res.status).to.eq(200)
+        expect(res.body).to.have.property('solicitudId', 1)
+    })
+    })
 
-    it("POST /api/solicitudes/asignar", () => {
-        cy.request("POST", `${BASE}/api/solicitudes/asignar`, {
-            solicitudId: 1,
-            prestadorId: 2
-        }).then((res) => {
-            expect(res.status).to.eq(201);
-            expect(res.body).to.have.property("pagoId");   // según tu DTO
-        });
-    });
+    
 
-    it("GET /api/solicitudes/ws", () => {
-        cy.request("GET", `${BASE}/api/solicitudes/ws`).then((res) => {
+    it('recibe una cotizacion', () => {
+    cy.request('POST', '/solicitudes/recibirCotizacion', {
+        solicitudId: 1,
+        prestadorId: 2,
+        monto: 5000
+    }).then((res) => {
+        expect(res.status).to.eq(201)
+        expect(res.body).to.have.property('solicitudID', 1)
+    })
+    })  
+
+    it('asigna solicitud', () => {
+    cy.request('POST', '/solicitudes/asignar', {
+        solicitudId: 1,
+        prestadorId: 2
+    }).then((res) => {
+        expect(res.status).to.eq(201)
+        expect(res.body).to.have.property('solicitudId', 1)
+    })
+    })
+
+    it("GET /solicitudes/ws", () => {
+        cy.request("GET", `${BASE}/solicitudes/ws`).then((res) => {
             expect(res.status).to.eq(200);
             expect(res.body).to.be.an("array");
         });

@@ -1,7 +1,7 @@
 /// <reference types="cypress" />
 
 const BASE = Cypress.env('API_BASE') || 'http://localhost:8080'
-const url = `${BASE}/api/solicitudes/invitar-top3`
+const url = `${BASE}/solicitudes/invitar-top3`
 
 
 describe('Burst concurrente (ligero desde Node)', () => {
