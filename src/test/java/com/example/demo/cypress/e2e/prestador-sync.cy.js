@@ -11,6 +11,7 @@ describe("PrestadorSyncController", () => {
       nombre: "Juan Perez",
       email: "juan@test.com",
       telefono: "123456789",
+      rubro: "Electricista",
     }).then((res) => {
       expect(res.status).to.eq(200);
       expect(res.body).to.eq("ok");
@@ -19,8 +20,20 @@ describe("PrestadorSyncController", () => {
 
   it("upsert batch prestadores", () => {
     cy.request("POST", `${url}/batch`, [
-      { id: 1, nombre: "Juan", email: "juan@test.com", telefono: "123" },
-      { id: 2, nombre: "Maria", email: "maria@test.com", telefono: "456" },
+      {
+        id: 1,
+        nombre: "Juan",
+        email: "juan@test.com",
+        telefono: "123",
+        rubro: "Gasista",
+      },
+      {
+        id: 2,
+        nombre: "Maria",
+        email: "maria@test.com",
+        telefono: "456",
+        rubro: "Plomería",
+      },
     ]).then((res) => {
       expect(res.status).to.eq(200);
       expect(res.body).to.eq("ok");

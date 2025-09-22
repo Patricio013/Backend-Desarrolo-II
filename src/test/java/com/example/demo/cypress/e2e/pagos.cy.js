@@ -7,7 +7,10 @@ describe("PagosController", () => {
 
   it("crea un pago", () => {
     cy.request("POST", `${BASE}/solicitudes/crear`, [
-      { descripcion: "Pago prueba A", rubro: "Electricista" },
+      {
+        descripcion: "Pago prueba A",
+        rubro: "Electricista",
+      },
     ]).then((res) => {
       const solicitudId = res.body[0].id;
 
@@ -27,7 +30,10 @@ describe("PagosController", () => {
 
   it("obtiene un pago por id", () => {
     cy.request("POST", `${BASE}/solicitudes/crear`, [
-      { descripcion: "Pago prueba B", rubro: "Electricista" },
+      {
+        descripcion: "Pago prueba B",
+        rubro: "Electricista",
+      },
     ]).then((res) => {
       const solicitudId = res.body[0].id;
 
