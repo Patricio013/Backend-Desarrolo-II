@@ -9,7 +9,6 @@ import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.PrestadorRepository;
-import com.example.demo.repository.RubroRepository;
 import com.example.demo.repository.SolicitudRepository;
 
 import org.slf4j.Logger;
@@ -24,7 +23,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.HashMap;
 import java.util.Objects;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,11 +34,11 @@ public class SolicitudService {
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
 
     @Autowired private NotificacionesService notificacionesService;
+    @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
     @Autowired private PrestadorRepository prestadorRepository;
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
-    @Autowired private RubroRepository rubroService;
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
@@ -78,6 +79,14 @@ public class SolicitudService {
         // Volver a COTIZANDO y enviar
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO (recotización)
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud recotizada",
+            "La solicitud volvió a COTIZANDO",
+            Map.of()
+        );
 
         var invitaciones = top3.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Recotización: invitación a cotizar"))
@@ -88,6 +97,14 @@ public class SolicitudService {
                     ref,
                     "Recotización: invitación enviada",
                     "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+                );
+                // Evento WS por invitación
+                solicitudEventsPublisher.notifySolicitudEvent(
+                    solicitud,
+                    "INVITACION_ENVIADA",
+                    "Recotización: invitación enviada",
+                    "Se invitó al prestador " + dto.getPrestadorId(),
+                    Map.of("prestadorId", dto.getPrestadorId())
                 );
             })
             .collect(Collectors.toList());
@@ -140,6 +157,14 @@ public class SolicitudService {
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud en cotización",
+            "La solicitud pasó a COTIZANDO",
+            Map.of()
+        );
 
         var invitaciones = top3.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Invitación a cotizar"))
@@ -150,6 +175,14 @@ public class SolicitudService {
                     cotizacionId,
                     "Invitación de cotización enviada",
                     "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
+                );
+                // Evento WS por invitación
+                solicitudEventsPublisher.notifySolicitudEvent(
+                    solicitud,
+                    "INVITACION_ENVIADA",
+                    "Invitación de cotización enviada",
+                    "Se invitó al prestador " + dto.getPrestadorId(),
+                    Map.of("prestadorId", dto.getPrestadorId())
                 );
             })
             .collect(Collectors.toList());
@@ -196,8 +229,25 @@ public class SolicitudService {
                 .build()
         );
 
+        // Evento WS por invitación (asignación directa)
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "INVITACION_ENVIADA",
+            "Asignación directa: invitación enviada",
+            "Se invitó al prestador " + aviso.getPrestadorId(),
+            Map.of("prestadorId", aviso.getPrestadorId())
+        );
+
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
         solicitudRepository.save(solicitud);
+        // Notificar cambio de estado a COTIZANDO
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud en cotización",
+            "La solicitud pasó a COTIZANDO",
+            Map.of()
+        );
 
         out.setEstado(solicitud.getEstado().name());
         out.setTop3(List.of(aviso));
@@ -242,6 +292,14 @@ public class SolicitudService {
         }
         s.setEstado(EstadoSolicitud.CANCELADA);
         solicitudRepository.save(s);
+        // Notificar cancelación
+        solicitudEventsPublisher.notifySolicitudEvent(
+            s,
+            "SOLICITUD_STATUS_CHANGED",
+            "Solicitud cancelada",
+            "La solicitud fue cancelada",
+            Map.of()
+        );
     }
 
     private boolean estaLibre(Prestador prestador, Solicitud solicitud) {
@@ -280,7 +338,7 @@ public class SolicitudService {
         Solicitud.SolicitudBuilder b = Solicitud.builder()
             .id(e.getSolicitudId())
             .usuarioId(e.getUsuarioId())
-            .rubroId(rubroService.findByNombre(e.getRubro()).getId())
+            .rubroId(e.getRubro())
             .descripcion(e.getDescripcion())
             .estado(EstadoSolicitud.CREADA)
             .prestadorAsignadoId(e.getPrestadorId());
@@ -299,7 +357,18 @@ public class SolicitudService {
             }
         }
 
-        return solicitudRepository.save(b.build());
+        Solicitud creada = solicitudRepository.save(b.build());
+        // Notificar creación en estado CREADA
+        try {
+            solicitudEventsPublisher.notifySolicitudEvent(
+                creada,
+                "SOLICITUD_CREATED",
+                "Solicitud creada",
+                "Se creó la solicitud",
+                Map.of()
+            );
+        } catch (Exception ignored) {}
+        return creada;
     }
 
     private Ventana parseVentana(String ventana) {
@@ -311,4 +380,82 @@ public class SolicitudService {
     }
 
     private record Ventana(LocalTime desde, LocalTime hasta) {}
+
+    // --- Listado en formato WS ---
+    public List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> listarTodasComoWs() {
+        return solicitudRepository.findAll().stream()
+            .map(this::buildWsEventSegunEstado)
+            .collect(Collectors.toList());
+    }
+
+    private com.example.demo.websocket.SolicitudEventsPublisher.WsEvent buildWsEventSegunEstado(Solicitud s) {
+        var estado = s.getEstado();
+        String status = (estado != null) ? estado.name() : null;
+        String type = "";
+        String title = "";
+        String description = "";
+        Map<String, Object> details = new HashMap<>();
+        details.put("solicitudId", s.getId());
+
+        if (estado == null) {
+            type = "SOLICITUD_STATUS";
+            title = "Estado de solicitud";
+            description = "La solicitud está en estado desconocido";
+        } else switch (estado) {
+            case CREADA -> {
+                type = "SOLICITUD_CREADA";
+                title = "Solicitud creada";
+                description = "La solicitud está CREADA";
+                putIfNotNull(details, "usuarioId", s.getUsuarioId());
+                putIfNotNull(details, "rubroId", s.getRubroId());
+                putIfNotNull(details, "descripcion", s.getDescripcion());
+                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
+                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
+                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
+            }
+            case COTIZANDO -> {
+                type = "SOLICITUD_COTIZANDO";
+                title = "Solicitud en cotización";
+                description = "La solicitud está COTIZANDO";
+                putIfNotNull(details, "rubroId", s.getRubroId());
+                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
+                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
+                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
+            }
+            case ASIGNADA -> {
+                type = "SOLICITUD_ASIGNADA";
+                title = "Solicitud asignada";
+                description = "La solicitud está ASIGNADA";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+            }
+            case EN_PROGRESO -> {
+                type = "SOLICITUD_EN_PROGRESO";
+                title = "Solicitud en progreso";
+                description = "La solicitud está EN_PROGRESO";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+            }
+            case COMPLETADA -> {
+                type = "SOLICITUD_COMPLETADA";
+                title = "Solicitud completada";
+                description = "La solicitud está COMPLETADA";
+                putIfNotNull(details, "prestadorAsignadoId", s.getPrestadorAsignadoId());
+                putIfNotNull(details, "completedAt", s.getUpdatedAt());
+            }
+            case CANCELADA -> {
+                type = "SOLICITUD_CANCELADA";
+                title = "Solicitud cancelada";
+                description = "La solicitud está CANCELADA";
+                putIfNotNull(details, "canceledAt", s.getUpdatedAt());
+            }
+        }
+
+        return new com.example.demo.websocket.SolicitudEventsPublisher.WsEvent(
+                type, status, title, description, details);
+    }
+
+    private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
+        if (value != null) map.put(key, value);
+    }
 }
