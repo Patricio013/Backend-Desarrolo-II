@@ -1,6 +1,8 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.PrestadorDTO;
+import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.PrestadorSyncService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
@@ -21,16 +23,17 @@ import java.util.List;
 public class PrestadorSyncController {
 
   private final PrestadorSyncService syncService;
+  private final ModuleResponseFactory responseFactory;
 
-  @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_PLAIN_VALUE)
+  @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
   @Transactional
-  public ResponseEntity<String> upsert(@RequestBody PrestadorDTO dto) {
+  public ResponseEntity<ModuleResponse<String>> upsert(@RequestBody PrestadorDTO dto) {
     syncService.upsertDesdeDTO(dto); // ignoramos la entidad resultante
-    return ResponseEntity.ok("ok");
+    return ResponseEntity.ok(responseFactory.build("prestadores", "prestadorActualizado", "ok"));
   }
 
-  @PostMapping(value = "/batch", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_PLAIN_VALUE)
-  public ResponseEntity<String> upsertBatch(@RequestBody List<PrestadorDTO> dtos) {
+  @PostMapping(value = "/batch", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<ModuleResponse<String>> upsertBatch(@RequestBody List<PrestadorDTO> dtos) {
     int ok = 0, fail = 0;
     for (PrestadorDTO dto : dtos) {
       try {
@@ -48,6 +51,6 @@ public class PrestadorSyncController {
       }
     }
     log.info("Batch prestadores: ok={}, fail={}", ok, fail);
-    return ResponseEntity.ok("ok");
+    return ResponseEntity.ok(responseFactory.build("prestadores", "prestadoresBatchProcesados", "ok"));
   }
 }

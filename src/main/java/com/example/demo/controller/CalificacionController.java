@@ -1,11 +1,12 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.RecibirCalificacionesDTO;
+import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.CalificacionService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +20,14 @@ import java.util.List;
 @Slf4j
 public class CalificacionController {
 
-  @Autowired private CalificacionService calificacionService;
+  private final CalificacionService calificacionService;
+  private final ModuleResponseFactory responseFactory;
 
-  @PostMapping(value = "/calificaciones", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_PLAIN_VALUE)
-  public ResponseEntity<String> agregarBatch(@RequestBody List<RecibirCalificacionesDTO> items) {
+  @PostMapping(
+      value = "/calificaciones",
+      consumes = MediaType.APPLICATION_JSON_VALUE,
+      produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<ModuleResponse<String>> agregarBatch(@RequestBody List<RecibirCalificacionesDTO> items) {
     int ok = 0, fail = 0;
     for (RecibirCalificacionesDTO it : items) {
       try {
@@ -37,6 +42,6 @@ public class CalificacionController {
       }
     }
     log.info("Batch calificaciones: ok={}, fail={}", ok, fail);
-    return ResponseEntity.ok("ok");
+    return ResponseEntity.ok(responseFactory.build("calificaciones", "calificacionesBatchProcesadas", "ok"));
   }
 }
