@@ -54,6 +54,8 @@ public class SolicitudController {
         private Long solicitudId;
         private String descripcion;
         private String estado; // COTIZANDO
+        private Boolean fueCotizada;
+        private Boolean esCritica;
         private List<InvitacionCotizacionDTO> top3;
 
         public Long getSolicitudId() { return solicitudId; }
@@ -62,6 +64,10 @@ public class SolicitudController {
         public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
         public String getEstado() { return estado; }
         public void setEstado(String estado) { this.estado = estado; }
+        public Boolean getFueCotizada() { return fueCotizada; }
+        public void setFueCotizada(Boolean fueCotizada) { this.fueCotizada = fueCotizada; }
+        public Boolean getEsCritica() { return esCritica; }
+        public void setEsCritica(Boolean esCritica) { this.esCritica = esCritica; }
         public List<InvitacionCotizacionDTO> getTop3() { return top3; }
         public void setTop3(List<InvitacionCotizacionDTO> top3) { this.top3 = top3; }
     }

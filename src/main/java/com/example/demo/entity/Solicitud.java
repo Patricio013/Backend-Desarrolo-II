@@ -43,6 +43,14 @@ public class Solicitud {
     @Builder.Default
     private EstadoSolicitud estado = EstadoSolicitud.CREADA;
 
+    @Column(name = "fue_cotizada", nullable = false)
+    @Builder.Default
+    private boolean fueCotizada = false;
+
+    @Column(name = "es_critica", nullable = false)
+    @Builder.Default
+    private boolean esCritica = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -63,3 +71,4 @@ public class Solicitud {
         this.updatedAt = LocalDateTime.now();
     }
 }
+

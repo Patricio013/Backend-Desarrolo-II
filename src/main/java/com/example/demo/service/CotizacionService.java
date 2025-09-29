@@ -108,6 +108,7 @@ public class CotizacionService {
                         .monto(BigDecimal.valueOf(c.getValor()))
                         .build())
                 .collect(Collectors.toList());
+        final int totalCotizaciones = items.size();
 
         SolicitudCotizacionesPut payload = SolicitudCotizacionesPut.builder()
                 .idsolicitud(solicitud.getId())
@@ -116,9 +117,10 @@ public class CotizacionService {
 
         // (3) PUT a Solicitudes
         solicitudesClient.putCotizaciones(payload);
-
-        // (4) Enviar a módulo de Búsquedas
-        busquedasClient.indexarSolicitudCotizaciones(payload);
+        // (4) Enviar a modulo de Busquedas (criticas recien con 3)
+        if (!solicitud.isEsCritica() || totalCotizaciones == 3) {
+            busquedasClient.indexarSolicitudCotizaciones(payload);
+        }
 
         // (5) Notificación interna (opcional)
         // notificacionesService.crearNotificacion(
@@ -139,7 +141,6 @@ public class CotizacionService {
         final Long prestadorIdFinal  = prestador.getId();
         final Long cotizacionIdFinal = cotizacion.getId();
         final BigDecimal montoFinal  = in.getMonto();
-        final int totalCotizaciones  = items.size();
 
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override public void afterCommit() {
@@ -270,3 +271,4 @@ public class CotizacionService {
         return pagoDTO;
     }
 }
+

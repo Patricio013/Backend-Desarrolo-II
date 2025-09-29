@@ -66,18 +66,22 @@ public class SolicitudService {
             .filter(p -> estaLibre(p, solicitud))
             .toList();
 
-        List<Prestador> top3 = candidatos.stream().limit(3).toList();
-        if (top3.isEmpty()) {
+        int maxInvitaciones = solicitud.isEsCritica() ? 10 : 3;
+        List<Prestador> seleccion = candidatos.stream().limit(maxInvitaciones).toList();
+        if (seleccion.isEmpty()) {
             var out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name()); // sigue CANCELADA
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
 
         // Volver a COTIZANDO y enviar
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO (recotización)
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -88,7 +92,7 @@ public class SolicitudService {
             Map.of()
         );
 
-        var invitaciones = top3.stream()
+        var invitaciones = seleccion.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Recotización: invitación a cotizar"))
             .peek(dto -> {
                 dto.setEnviado(cotizacionClient.enviarInvitacion(dto));
@@ -113,6 +117,8 @@ public class SolicitudService {
         out.setSolicitudId(solicitud.getId());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(invitaciones);
         return out;
     }
@@ -140,22 +146,26 @@ public class SolicitudService {
             rubroId, PageRequest.of(0, 10) // pedí más de 3 para que haya margen al filtrar
         );
 
-        List<Prestador> top3 = candidatos.stream()
+        int maxInvitaciones = solicitud.isEsCritica() ? 10 : 3;
+        List<Prestador> seleccion = candidatos.stream()
             .filter(p -> estaLibre(p, solicitud))
-            .limit(3)
+            .limit(maxInvitaciones)
             .toList();
 
-        if (top3.isEmpty()) {
+        if (seleccion.isEmpty()) {
             log.warn("Sin candidatos ACTIVO para rubro {} (solicitud {}) — se mantiene en CREADA", rubroId, solicitud.getId());
             SolicitudTop3Resultado out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name());
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -166,7 +176,7 @@ public class SolicitudService {
             Map.of()
         );
 
-        var invitaciones = top3.stream()
+        var invitaciones = seleccion.stream()
             .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Invitación a cotizar"))
             .peek(dto -> dto.setEnviado(cotizacionClient.enviarInvitacion(dto)))
             .peek(dto -> {
@@ -191,6 +201,8 @@ public class SolicitudService {
         out.setSolicitudId(solicitud.getId());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(invitaciones);
         return out;
     }
@@ -205,6 +217,8 @@ public class SolicitudService {
         if (p == null) {
             log.error("prestador_asignado_id={} no existe (solicitud {})", prestadorId, solicitud.getId());
             out.setEstado(solicitud.getEstado().name());
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
@@ -239,6 +253,7 @@ public class SolicitudService {
         );
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -250,6 +265,8 @@ public class SolicitudService {
         );
 
         out.setEstado(solicitud.getEstado().name());
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(List.of(aviso));
         return out;
     }
@@ -341,7 +358,9 @@ public class SolicitudService {
             .rubroId(e.getRubro())
             .descripcion(e.getDescripcion())
             .estado(EstadoSolicitud.CREADA)
-            .prestadorAsignadoId(e.getPrestadorId());
+            .prestadorAsignadoId(e.getPrestadorId())
+            .fueCotizada(Boolean.TRUE.equals(e.getFueCotizada()))
+            .esCritica(Boolean.TRUE.equals(e.getEsCritica()));
 
         // Preferencia horaria
         var ph = e.getPreferenciaHoraria();
@@ -396,6 +415,8 @@ public class SolicitudService {
         String description = "";
         Map<String, Object> details = new HashMap<>();
         details.put("solicitudId", s.getId());
+        details.put("fueCotizada", s.isFueCotizada());
+        details.put("esCritica", s.isEsCritica());
 
         if (estado == null) {
             type = "SOLICITUD_STATUS";
