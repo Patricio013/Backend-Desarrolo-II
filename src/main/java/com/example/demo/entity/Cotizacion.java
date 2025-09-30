@@ -8,13 +8,14 @@ import lombok.*;
         name = "cotizacion",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_cotiz_prest_solic",
-                        columnNames = {"prestador_id", "solicitud_id"}
+                        name = "uk_cotiz_prest_solic_round",
+                        columnNames = {"prestador_id", "solicitud_id", "round"}
                 )
         },
         indexes = {
                 @Index(name = "ix_cotiz_prestador", columnList = "prestador_id"),
-                @Index(name = "ix_cotiz_solicitud", columnList = "solicitud_id")
+                @Index(name = "ix_cotiz_solicitud", columnList = "solicitud_id"),
+                @Index(name = "ix_cotiz_round", columnList = "round")
         }
 )
 @Getter
@@ -38,4 +39,8 @@ public class Cotizacion {
 
     @Column(nullable = false)
     private Double valor;
+
+    @Column(nullable = false, columnDefinition = "integer default 1")
+    @Builder.Default
+    private int round = 1;
 }

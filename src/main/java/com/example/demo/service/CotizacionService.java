@@ -10,13 +10,17 @@ import com.example.demo.dto.SolicitudAsignarDTO;
 import com.example.demo.dto.SolicitudPagoCreateDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
 import com.example.demo.entity.Cotizacion;
+import com.example.demo.entity.Solicitud;
 // import com.example.demo.entity.Notificaciones;           // <-- comentá si no lo usás
 import com.example.demo.websocket.SolicitudEventsPublisher;      // <-- ajustá el paquete si difiere
 import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudRepository;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +29,18 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 public class CotizacionService {
+
+    private static final int MIN_COTIZACIONES_BATCH = 3;
+
+    private static final Logger log = LoggerFactory.getLogger(CotizacionService.class);
 
     @Autowired
     private CotizacionRepository cotizacionRepository;
@@ -60,6 +70,21 @@ public class CotizacionService {
     @Autowired
     private SolicitudPagoService solicitudPagoService;
 
+    @Autowired
+    private SolicitudService solicitudService;
+
+    @Value("${solicitudes.cotizaciones.wait-minutes:5}")
+    private long waitMinutes;
+
+    private Duration maxWaitBeforeExtraInvite;
+
+    @jakarta.annotation.PostConstruct
+    void init() {
+        maxWaitBeforeExtraInvite = (waitMinutes <= 0)
+            ? Duration.ZERO
+            : Duration.ofMinutes(waitMinutes);
+    }
+
     @Transactional
     public void recibirCotizacion(CotizacionesSubmit in) {
 
@@ -71,55 +96,73 @@ public class CotizacionService {
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Solicitud no encontrada: " + in.getSolicitudId()));
 
+        final int currentRound = solicitud.getCotizacionRound();
+
         var existente = cotizacionRepository
-                .findByPrestador_IdAndSolicitud_Id(in.getPrestadorId(), in.getSolicitudId());
+                .findByPrestador_IdAndSolicitud_IdAndRound(in.getPrestadorId(), in.getSolicitudId(), currentRound);
 
         Cotizacion cotizacion;
         boolean created;
         if (existente.isPresent()) {
             cotizacion = existente.get();
             cotizacion.setValor(in.getMonto().doubleValue());
+            cotizacion.setRound(currentRound);
             created = false;
         } else {
             cotizacion = Cotizacion.builder()
                     .prestador(prestador)
                     .solicitud(solicitud)
                     .valor(in.getMonto().doubleValue())
+                    .round(currentRound)
                     .build();
             created = true;
         }
         cotizacion = cotizacionRepository.save(cotizacion);
 
-        // (1) Enviar al Core con JSON mínimo {idsolicitud,idprestador,monto}
-        coreClient.enviarCotizacion(
-                CotizacionesSubmit.builder()
-                        .solicitudId(solicitud.getId())
-                        .prestadorId(prestador.getId())
-                        .monto(in.getMonto())
-                        .build()
-        );
+        List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
+                .findBySolicitud_IdAndRound(solicitud.getId(), currentRound);
+        final int totalCotizaciones = cotizacionesSolicitud.size();
+        final boolean listoParaDespacho = totalCotizaciones == MIN_COTIZACIONES_BATCH;
 
-        // ===== Si aún no tenés los clientes abajo, podés comentar todo este bloque =====
-        // (2) Armar payload con TODAS las cotizaciones de la solicitud
-        List<SolicitudCotizacionesPut.Item> items = cotizacionRepository.findBySolicitud_Id(solicitud.getId())
-                .stream()
-                .map(c -> SolicitudCotizacionesPut.Item.builder()
-                        .idprestador(c.getPrestador().getId())
-                        .monto(BigDecimal.valueOf(c.getValor()))
-                        .build())
-                .collect(Collectors.toList());
-        final int totalCotizaciones = items.size();
+        if (listoParaDespacho) {
+            // (1) Enviar al Core con las cotizaciones disponibles en un solo batch lógico
+            cotizacionesSolicitud.forEach(c -> coreClient.enviarCotizacion(
+                    CotizacionesSubmit.builder()
+                            .solicitudId(solicitud.getId())
+                            .prestadorId(c.getPrestador().getId())
+                            .monto(BigDecimal.valueOf(c.getValor()))
+                            .build()
+            ));
 
-        SolicitudCotizacionesPut payload = SolicitudCotizacionesPut.builder()
-                .idsolicitud(solicitud.getId())
-                .cotizaciones(items)
-                .build();
+            // (2) Armar payload con TODAS las cotizaciones de la solicitud
+            List<SolicitudCotizacionesPut.Item> items = cotizacionesSolicitud.stream()
+                    .map(c -> SolicitudCotizacionesPut.Item.builder()
+                            .idprestador(c.getPrestador().getId())
+                            .monto(BigDecimal.valueOf(c.getValor()))
+                            .build())
+                    .collect(Collectors.toList());
 
-        // (3) PUT a Solicitudes
-        solicitudesClient.putCotizaciones(payload);
-        // (4) Enviar a modulo de Busquedas (criticas recien con 3)
-        if (!solicitud.isEsCritica() || totalCotizaciones == 3) {
-            busquedasClient.indexarSolicitudCotizaciones(payload);
+            SolicitudCotizacionesPut payload = SolicitudCotizacionesPut.builder()
+                    .idsolicitud(solicitud.getId())
+                    .cotizaciones(items)
+                    .build();
+
+            // (3) PUT a Solicitudes
+            solicitudesClient.putCotizaciones(payload);
+            // (4) Enviar a modulo de Busquedas (criticas recien con 3)
+            if (!solicitud.isEsCritica() || totalCotizaciones == MIN_COTIZACIONES_BATCH) {
+                busquedasClient.indexarSolicitudCotizaciones(payload);
+            }
+        } else {
+            if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones)) {
+                boolean invited = solicitudService.invitarPrestadorAdicional(solicitud);
+                if (invited) {
+                    log.debug("Solicitud {}: se envió invitación adicional en round {}", solicitud.getId(), currentRound);
+                } else {
+                    log.debug("Solicitud {}: no fue posible invitar prestador adicional (round {}, total invitaciones actuales {})",
+                        solicitud.getId(), currentRound, totalCotizaciones);
+                }
+            }
         }
 
         // (5) Notificación interna (opcional)
@@ -154,7 +197,8 @@ public class CotizacionService {
                                 "solicitudId",  solicitudIdFinal,
                                 "prestadorId",  prestadorIdFinal,
                                 "cotizacionId", cotizacionIdFinal,
-                                "monto",        montoFinal
+                                "monto",        montoFinal,
+                                "round",        currentRound
                         )
                 );
 
@@ -166,12 +210,26 @@ public class CotizacionService {
                         "Se actualizó la lista completa de cotizaciones",
                         Map.of(
                                 "solicitudId", solicitudIdFinal,
-                                "total",       totalCotizaciones
+                                "total",       totalCotizaciones,
+                                "round",       currentRound
                         )
                 );
             }
         });
         // =================================================================
+    }
+
+    private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones) {
+        if (totalCotizaciones >= MIN_COTIZACIONES_BATCH) {
+            return false;
+        }
+        LocalDateTime inicio = solicitud.getCotizacionRoundStartedAt();
+        if (inicio == null) {
+            solicitud.setCotizacionRoundStartedAt(LocalDateTime.now());
+            return false;
+        }
+        Duration transcurrido = Duration.between(inicio, LocalDateTime.now());
+        return transcurrido.compareTo(maxWaitBeforeExtraInvite) >= 0;
     }
 
     /**
@@ -190,6 +248,8 @@ public class CotizacionService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Prestador no encontrado: " + in.getPrestadorId()));
 
+        final int currentRound = solicitud.getCotizacionRound();
+
         // Validar estado razonable para asignar
         if (solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.CANCELADA
                 || solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.COMPLETADA) {
@@ -197,7 +257,8 @@ public class CotizacionService {
         }
 
         // Debe existir una cotización de ese prestador para esa solicitud
-        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_Id(in.getPrestadorId(), in.getSolicitudId());
+        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_IdAndRound(
+                in.getPrestadorId(), in.getSolicitudId(), currentRound);
         var cotizacion = opt.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "No existe cotización del prestador " + in.getPrestadorId() + " para la solicitud " + in.getSolicitudId()));
 
@@ -271,4 +332,3 @@ public class CotizacionService {
         return pagoDTO;
     }
 }
-
