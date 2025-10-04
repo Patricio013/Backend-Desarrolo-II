@@ -13,7 +13,7 @@ import lombok.NoArgsConstructor;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ModuleResponse<T> {
     private String webhookUrl;
-    private String squadName;
+    private String teamName;
     private String topic;
     private String eventName;
     private T message;

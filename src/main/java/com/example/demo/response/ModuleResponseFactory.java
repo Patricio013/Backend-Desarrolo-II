@@ -8,19 +8,19 @@ import org.springframework.stereotype.Component;
 public class ModuleResponseFactory {
 
     private final String webhookUrl;
-    private final String squadName;
+    private final String teamName;
 
     public ModuleResponseFactory(
             @Value("${module.response.webhook-url:https://matching-squad.com/webhook}") String webhookUrl,
-            @Value("${module.response.squad-name:matching-squad}") String squadName) {
+            @Value("${module.response.team-name:matching}") String teamName) {
         this.webhookUrl = webhookUrl;
-        this.squadName = squadName;
+        this.teamName = teamName;
     }
 
     public <T> ModuleResponse<T> build(String topic, String eventName, T message) {
         return ModuleResponse.<T>builder()
                 .webhookUrl(webhookUrl)
-                .squadName(squadName)
+                .teamName(teamName)
                 .topic(topic)
                 .eventName(eventName)
                 .message(message)
