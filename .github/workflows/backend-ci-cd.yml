@@ -2,17 +2,17 @@ name: backend-ci-cd
 
 on:
   push:
-    branches: [ "main", "DevOps" ]
+    branches: [ "Pruebas" ]
   pull_request:
-    branches: [ "main", "DevOps" ]
+    branches: [ "Pruebas" ]
   workflow_dispatch:
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
-  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+  ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_STG }}
   ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
-  ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
-  CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE_STG }}
+  CONTAINER_NAME: ${{ secrets.CONTAINER_NAME_STG }}
 
 jobs:
   build-and-deploy:
