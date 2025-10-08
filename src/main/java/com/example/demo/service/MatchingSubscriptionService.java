@@ -46,6 +46,12 @@ public class MatchingSubscriptionService {
         String safeEvent = eventName.trim();
         SubscriptionRequest body = new SubscriptionRequest(webhookUrl, teamName, safeTopic, safeEvent);
         try {
+            log.info("Enviando suscripción Matching topic={} eventName={} webhookUrl={} squadName={} apiKey={}",
+                    safeTopic,
+                    safeEvent,
+                    webhookUrl,
+                    teamName,
+                    maskApiKey(properties.apiKey()));
             ResponseEntity<Void> response = matchingRestClient.post()
                     .uri(properties.subscribePath())
                     .body(body)
@@ -167,6 +173,17 @@ public class MatchingSubscriptionService {
     }
 
     private record AckRequest(String msgId, String subscriptionId) {
+    }
+
+    private static String maskApiKey(String apiKey) {
+        if (apiKey == null || apiKey.isBlank()) {
+            return "<empty>";
+        }
+        String trimmed = apiKey.trim();
+        if (trimmed.length() <= 6) {
+            return trimmed.charAt(0) + "****";
+        }
+        return trimmed.substring(0, 4) + "****" + trimmed.substring(trimmed.length() - 2);
     }
 
     public record SubscriptionResult(

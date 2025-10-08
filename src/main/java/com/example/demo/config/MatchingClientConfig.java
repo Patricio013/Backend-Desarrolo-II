@@ -23,10 +23,18 @@ public class MatchingClientConfig {
 
         if (properties.hasApiKey()) {
             builder = builder.defaultHeader("X-API-KEY", properties.apiKey());
+            log.info("Matching RestClient configurado con API key {}", mask(properties.apiKey()));
         } else {
             log.warn("Matching API key is empty; requests will be sent without authentication header");
         }
 
         return builder.build();
+    }
+
+    private static String mask(String apiKey) {
+        if (apiKey == null || apiKey.length() < 6) {
+            return "****";
+        }
+        return apiKey.substring(0, 4) + "****" + apiKey.substring(apiKey.length() - 2);
     }
 }
