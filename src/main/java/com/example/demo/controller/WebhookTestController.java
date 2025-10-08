@@ -37,8 +37,14 @@ public class WebhookTestController {
         log.info("Webhook message received: {}", safePayload);
 
         AckOutcome ackOutcome = attemptAckIfPossible(safePayload);
-        String topic = extractString(safePayload, "topic");
-        String eventName = extractString(safePayload, "eventName");
+        String topic = firstNonNull(
+                extractString(safePayload, "topic"),
+                extractNestedString(safePayload, "destination", "channel")
+        );
+        String eventName = firstNonNull(
+                extractString(safePayload, "eventName"),
+                extractNestedString(safePayload, "destination", "eventName")
+        );
         String messageId = extractString(safePayload, "msgId");
         if (messageId == null) {
             messageId = extractString(safePayload, "messageId");
@@ -97,6 +103,23 @@ public class WebhookTestController {
             return str.isBlank() ? null : str;
         }
         return value.toString();
+    }
+
+    private String extractNestedString(Map<String, Object> payload, String key, String nestedKey) {
+        if (payload == null) return null;
+        Object raw = payload.get(key);
+        if (raw instanceof Map<?,?> nested) {
+            Object nestedValue = nested.get(nestedKey);
+            if (nestedValue instanceof String str) {
+                return str.isBlank() ? null : str;
+            }
+            return nestedValue != null ? nestedValue.toString() : null;
+        }
+        return null;
+    }
+
+    private String firstNonNull(String a, String b) {
+        return a != null ? a : b;
     }
 
     private record AckOutcome(boolean performed, boolean success, Integer statusCode, String errorMessage) {
