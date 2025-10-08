@@ -40,6 +40,11 @@ public class SolicitudEventsPublisher {
                     Collections.unmodifiableMap(safeDetails)
             );
 
+            log.info("WS -> solicitudId={} type={} status={} detalles={}",
+                    solicitud.getId(),
+                    payload.type(),
+                    payload.status(),
+                    payload.details());
             // Notificación general (para listas)
             messagingTemplate.convertAndSend("/topic/solicitudes", payload);
             // Notificación específica por ID (para detalle)
