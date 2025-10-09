@@ -1,9 +1,12 @@
 package com.example.demo.dto;   
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SolicitudesCreadasDTO {
 
     @JsonProperty("solicitud_id")
@@ -12,7 +15,7 @@ public class SolicitudesCreadasDTO {
     @JsonProperty("usuario_id")
     private Long usuarioId;
  
-    @JsonProperty("rubro")
+    @JsonAlias({"rubro", "rubroId"})
     private Long rubro;
 
     @JsonProperty("descripcion")

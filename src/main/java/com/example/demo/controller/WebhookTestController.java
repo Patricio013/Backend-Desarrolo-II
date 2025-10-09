@@ -2,8 +2,10 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.ModuleResponse;
 import com.example.demo.entity.WebhookEvent;
+import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.MatchingSubscriptionService;
+import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,6 +30,8 @@ public class WebhookTestController {
     private final ModuleResponseFactory responseFactory;
     private final MatchingSubscriptionService subscriptionService;
     private final WebhookEventService webhookEventService;
+    private final SolicitudService solicitudService;
+    private final ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ModuleResponse<Map<String, Object>>> receive(
@@ -43,9 +47,8 @@ public class WebhookTestController {
         try {
             // Intento parsear JSON si luce como JSON (sin depender del Content-Type)
             if (!rawBody.isBlank() && looksLikeJson(rawBody)) {
-                ObjectMapper om = new ObjectMapper();
                 @SuppressWarnings("unchecked")
-                Map<String, Object> parsed = om.readValue(rawBody, Map.class);
+                Map<String, Object> parsed = objectMapper.readValue(rawBody, Map.class);
                 safePayload = parsed != null ? parsed : Map.of();
             }
 
@@ -74,6 +77,34 @@ public class WebhookTestController {
             );
             String subscriptionId = extractString(safePayload, "subscriptionId");
 
+
+            // Intentamos crear una solicitud si viene payload compatible
+            Map<String, Object> payloadSection = extractMap(safePayload, "payload");
+            boolean solicitudCreada = false;
+            Long solicitudIdCreada = null;
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("search.solicitud.created")
+                    && "created".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    SolicitudesCreadasDTO solicitudDto = objectMapper.convertValue(payloadSection, SolicitudesCreadasDTO.class);
+                    if (solicitudDto.getSolicitudId() != null) {
+                        var creadas = solicitudService.crearDesdeEventos(List.of(solicitudDto));
+                        for (var creada : creadas) {
+                            if (creada != null) {
+                                solicitudCreada = true;
+                                solicitudIdCreada = creada.getId();
+                                break;
+                            }
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+                    log.warn("No se pudo mapear payload de webhook a SolicitudesCreadasDTO: {}", e.getMessage());
+                } catch (Exception e) {
+                    log.error("Error procesando creación de solicitud desde webhook", e);
+                }
+            }
+
             // Guardamos SIEMPRE lo recibido (parsed + raw + headers + resultado del ACK)
             WebhookEvent stored = webhookEventService.storeEvent(
                     topic, eventName, messageId, subscriptionId,
@@ -86,7 +117,9 @@ public class WebhookTestController {
                                     "success", ackOutcome.success(),
                                     "status", ackOutcome.statusCode(),
                                     "error", ackOutcome.errorMessage()
-                            )
+                            ),
+                            "solicitudCreada", solicitudCreada,
+                            "solicitudId", solicitudIdCreada
                     )
             );
 
@@ -95,6 +128,10 @@ public class WebhookTestController {
             responsePayload.put("storedEventId", stored.getId());
             responsePayload.put("receivedContentType", request.getContentType());
             responsePayload.put("receivedHeaders", headers);
+            responsePayload.put("solicitudCreada", solicitudCreada);
+            if (solicitudIdCreada != null) {
+                responsePayload.put("solicitudId", solicitudIdCreada);
+            }
             if (ackOutcome.performed()) {
                 responsePayload.put("ackStatus", ackOutcome.statusCode());
                 responsePayload.put("ackSuccess", ackOutcome.success());
@@ -191,6 +228,16 @@ public class WebhookTestController {
                 return str.isBlank() ? null : str;
             }
             return nestedValue != null ? nestedValue.toString() : null;
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractMap(Map<String, Object> payload, String key) {
+        if (payload == null) return null;
+        Object value = payload.get(key);
+        if (value instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
         }
         return null;
     }
