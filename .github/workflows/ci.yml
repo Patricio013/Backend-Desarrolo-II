@@ -335,38 +335,51 @@ jobs:
                   echo "" >> $GITHUB_STEP_SUMMARY
 
 
-      - name: Consolidar métricas para gh-pages
+      - name: Consolidar métricas para gh-pages (tolerante)
         if: always()
         run: |
           mkdir -p metrics
 
-          # JUnit (extrae totales)
-          junit_reports=$(find . -type f -path "*/target/surefire-reports/*.xml" -o -path "*/target/failsafe-reports/*.xml")
-          totals=$(awk -F'"' '
-            /<testsuite / {
-              for (i=1;i<=NF;i++) {
-                if ($i ~ /tests=/)    T += $(i+1)
-                if ($i ~ /failures=/) F += $(i+1)
-                if ($i ~ /errors=/)   E += $(i+1)
-                if ($i ~ /skipped=/)  S += $(i+1)
+          # --- JUnit ---
+          junit_reports=$(find . -type f -path "*/target/surefire-reports/*.xml" -o -path "*/target/failsafe-reports/*.xml" || true)
+          if [ -n "$junit_reports" ]; then
+            totals=$(awk -F'"' '
+              /<testsuite / {
+                for (i=1;i<=NF;i++) {
+                  if ($i ~ /tests=/)    T += $(i+1)
+                  if ($i ~ /failures=/) F += $(i+1)
+                  if ($i ~ /errors=/)   E += $(i+1)
+                  if ($i ~ /skipped=/)  S += $(i+1)
+                }
               }
-            }
-            END { printf "%d %d %d %d\n", T, F, E, S }
-          ' $junit_reports)
-          T=$(echo "$totals" | awk '{print $1}')
-          F=$(echo "$totals" | awk '{print $2}')
-          E=$(echo "$totals" | awk '{print $3}')
-          S=$(echo "$totals" | awk '{print $4}')
-          echo "{ \"total\": $T, \"failures\": $F, \"errors\": $E, \"skipped\": $S }" > metrics/junit.json
+              END { printf "%d %d %d %d\n", T, F, E, S }
+            ' $junit_reports)
+            T=$(echo "$totals" | awk '{print $1}')
+            F=$(echo "$totals" | awk '{print $2}')
+            E=$(echo "$totals" | awk '{print $3}')
+            S=$(echo "$totals" | awk '{print $4}')
+            echo "{ \"total\": $T, \"failures\": $F, \"errors\": $E, \"skipped\": $S }" > metrics/junit.json
+          else
+            echo "{ \"total\": 0, \"failures\": 0, \"errors\": 0, \"skipped\": 0 }" > metrics/junit.json
+          fi
 
-          # k6
-          jq -s '{tests: .}' out/k6/*.json > metrics/k6.json
+          # --- k6 ---
+          if [ -d "out/k6" ] && ls out/k6/*.json >/dev/null 2>&1; then
+            jq -s '{tests: .}' out/k6/*.json > metrics/k6.json
+          else
+            echo '{ "tests": [] }' > metrics/k6.json
+          fi
 
-          # Cypress
-          cp out/cypress/results.json metrics/cypress.json
+          # --- Cypress ---
+          if [ -f "out/cypress/results.json" ]; then
+            cp out/cypress/results.json metrics/cypress.json
+          else
+            echo '{ "results": [] }' > metrics/cypress.json
+          fi
 
-          # Metadata (timestamp y commit)
+          # --- Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
+
 
 
       - name: Deploy métricas a gh-pages
