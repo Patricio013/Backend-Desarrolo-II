@@ -382,22 +382,26 @@ jobs:
 
 
 
-      - name: Deploy métricas a gh-pages
+      - name: Deploy métricas a gh-pages (seguro)
         if: always()
         run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
 
-          git fetch origin gh-pages || true
-          git checkout gh-pages || git checkout --orphan gh-pages
+          # Crear una carpeta temporal limpia
+          mkdir -p .ghpages-temp
+          cp -r metrics/* .ghpages-temp/
 
-          mkdir -p metrics
-          cp -r metrics/* .
+          # Inicializar un nuevo repo Git solo para gh-pages
+          cd .ghpages-temp
+          git init
+          git checkout -b gh-pages
 
           git add .
-          git commit -m "📊 Update metrics $(date -u +%FT%TZ)" || true
-          git push origin gh-pages
+          git commit -m "📊 Update metrics $(date -u +%FT%TZ)"
+
+          # Pushear usando el token de Actions
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
 
 
-
-                                                                                                                                                                                      
+                                                                                                                                                                                            
