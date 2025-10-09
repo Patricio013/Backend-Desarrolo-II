@@ -120,6 +120,14 @@ public class SolicitudController {
     }
 
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ModuleResponse<Solicitud>> obtenerDetalle(@PathVariable Long id) {
+        log.info("Obteniendo detalle de solicitud {}", id);
+        Solicitud detalle = solicitudService.obtenerDetalle(id);
+        return ResponseEntity.ok(responseFactory.build("solicitudes", "solicitudDetalle", detalle));
+    }
+
+
 
     @GetMapping("/ws")
     public ResponseEntity<ModuleResponse<List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent>>> listarTodasComoWs() {

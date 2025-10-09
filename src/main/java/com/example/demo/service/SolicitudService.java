@@ -575,4 +575,9 @@ public class SolicitudService {
     private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
         if (value != null) map.put(key, value);
     }
+
+    public Solicitud obtenerDetalle(Long id) {
+        return solicitudRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + id));
+    }
 }
