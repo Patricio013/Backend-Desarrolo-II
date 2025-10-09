@@ -334,4 +334,57 @@ jobs:
         
                   echo "" >> $GITHUB_STEP_SUMMARY
 
-                                                                                                                                                                                
+
+      - name: Consolidar métricas para gh-pages
+        if: always()
+        run: |
+          mkdir -p metrics
+
+          # JUnit (extrae totales)
+          junit_reports=$(find . -type f -path "*/target/surefire-reports/*.xml" -o -path "*/target/failsafe-reports/*.xml")
+          totals=$(awk -F'"' '
+            /<testsuite / {
+              for (i=1;i<=NF;i++) {
+                if ($i ~ /tests=/)    T += $(i+1)
+                if ($i ~ /failures=/) F += $(i+1)
+                if ($i ~ /errors=/)   E += $(i+1)
+                if ($i ~ /skipped=/)  S += $(i+1)
+              }
+            }
+            END { printf "%d %d %d %d\n", T, F, E, S }
+          ' $junit_reports)
+          T=$(echo "$totals" | awk '{print $1}')
+          F=$(echo "$totals" | awk '{print $2}')
+          E=$(echo "$totals" | awk '{print $3}')
+          S=$(echo "$totals" | awk '{print $4}')
+          echo "{ \"total\": $T, \"failures\": $F, \"errors\": $E, \"skipped\": $S }" > metrics/junit.json
+
+          # k6
+          jq -s '{tests: .}' out/k6/*.json > metrics/k6.json
+
+          # Cypress
+          cp out/cypress/results.json metrics/cypress.json
+
+          # Metadata (timestamp y commit)
+          echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
+
+
+      - name: Deploy métricas a gh-pages
+        if: always()
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+
+          git fetch origin gh-pages || true
+          git checkout gh-pages || git checkout --orphan gh-pages
+
+          mkdir -p metrics
+          cp -r metrics/* .
+
+          git add .
+          git commit -m "📊 Update metrics $(date -u +%FT%TZ)" || true
+          git push origin gh-pages
+
+
+
+                                                                                                                                                                                      
