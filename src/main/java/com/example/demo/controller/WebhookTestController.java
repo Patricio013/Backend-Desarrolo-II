@@ -106,21 +106,28 @@ public class WebhookTestController {
             }
 
             // Guardamos SIEMPRE lo recibido (parsed + raw + headers + resultado del ACK)
+            Map<String, Object> ackMetadata = new java.util.HashMap<>();
+            ackMetadata.put("performed", ackOutcome.performed());
+            ackMetadata.put("success", ackOutcome.success());
+            if (ackOutcome.statusCode() != null) {
+                ackMetadata.put("status", ackOutcome.statusCode());
+            }
+            if (ackOutcome.errorMessage() != null) {
+                ackMetadata.put("error", ackOutcome.errorMessage());
+            }
+
+            Map<String, Object> storedPayload = new java.util.HashMap<>();
+            storedPayload.put("parsed", safePayload);
+            storedPayload.put("rawBody", rawBody);
+            storedPayload.put("headers", headers);
+            storedPayload.put("ack", ackMetadata);
+            storedPayload.put("solicitudCreada", solicitudCreada);
+            if (solicitudIdCreada != null) {
+                storedPayload.put("solicitudId", solicitudIdCreada);
+            }
+
             WebhookEvent stored = webhookEventService.storeEvent(
-                    topic, eventName, messageId, subscriptionId,
-                    Map.of(
-                            "parsed", safePayload,
-                            "rawBody", rawBody,
-                            "headers", headers,
-                            "ack", Map.of(
-                                    "performed", ackOutcome.performed(),
-                                    "success", ackOutcome.success(),
-                                    "status", ackOutcome.statusCode(),
-                                    "error", ackOutcome.errorMessage()
-                            ),
-                            "solicitudCreada", solicitudCreada,
-                            "solicitudId", solicitudIdCreada
-                    )
+                    topic, eventName, messageId, subscriptionId, storedPayload
             );
 
             // Armamos respuesta para el proveedor
@@ -151,21 +158,16 @@ public class WebhookTestController {
                     /*eventName*/ "ingestError",
                     /*messageId*/ null,
                     /*subscriptionId*/ null,
-                    Map.of(
-                            "rawBody", rawBody,
-                            "headers", headers,
-                            "errorType", ex.getClass().getName(),
-                            "errorMessage", ex.getMessage(),
-                            "stackTrace", stack
-                    )
+                    buildErrorPayload(rawBody, headers, ex, stack)
             );
 
             log.error("Error procesando webhook. storedErrorEventId={}", errorStored.getId(), ex);
 
-            Map<String, Object> errorResponse = Map.of(
-                    "storedErrorEventId", errorStored.getId(),
-                    "error", ex.getMessage()
-            );
+            Map<String, Object> errorResponse = new java.util.HashMap<>();
+            errorResponse.put("storedErrorEventId", errorStored.getId());
+            if (ex.getMessage() != null) {
+                errorResponse.put("error", ex.getMessage());
+            }
             // Podés cambiar a badRequest() si querés forzar reintento del proveedor.
             return ResponseEntity.ok(responseFactory.build("webhooks", "ingestError", errorResponse));
         }
@@ -240,6 +242,21 @@ public class WebhookTestController {
             return (Map<String, Object>) map;
         }
         return null;
+    }
+
+    private Map<String, Object> buildErrorPayload(String rawBody,
+                                                  Map<String, String> headers,
+                                                  Exception ex,
+                                                  String stack) {
+        Map<String, Object> errorPayload = new java.util.HashMap<>();
+        errorPayload.put("rawBody", rawBody);
+        errorPayload.put("headers", headers);
+        errorPayload.put("errorType", ex.getClass().getName());
+        if (ex.getMessage() != null) {
+            errorPayload.put("errorMessage", ex.getMessage());
+        }
+        errorPayload.put("stackTrace", stack);
+        return errorPayload;
     }
 
     private String firstNonNull(String a, String b) {
