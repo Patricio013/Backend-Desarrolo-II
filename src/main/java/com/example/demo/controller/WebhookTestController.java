@@ -1,10 +1,13 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.ModuleResponse;
-import com.example.demo.entity.WebhookEvent;
+import com.example.demo.dto.PrestadorAltaWebhookDTO;
+import com.example.demo.dto.PrestadorDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.MatchingSubscriptionService;
+import com.example.demo.service.PrestadorSyncService;
 import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +35,7 @@ public class WebhookTestController {
     private final MatchingSubscriptionService subscriptionService;
     private final WebhookEventService webhookEventService;
     private final SolicitudService solicitudService;
+    private final PrestadorSyncService prestadorSyncService;
     private final ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -82,6 +87,9 @@ public class WebhookTestController {
             Map<String, Object> payloadSection = extractMap(safePayload, "payload");
             boolean solicitudCreada = false;
             Long solicitudIdCreada = null;
+            boolean prestadorProcesado = false;
+            Long prestadorIdProcesado = null;
+            List<String> prestadorWarnings = new ArrayList<>();
             if (payloadSection != null
                     && topic != null
                     && topic.equalsIgnoreCase("search.solicitud.created")
@@ -105,6 +113,25 @@ public class WebhookTestController {
                 }
             }
 
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.prestador.alta")
+                    && "alta_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    PrestadorAltaWebhookDTO prestadorAlta = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
+                    PrestadorDTO prestadorDTO = buildPrestadorDtoFromAlta(prestadorAlta, prestadorWarnings);
+                    prestadorSyncService.upsertDesdeDTO(prestadorDTO);
+                    prestadorProcesado = true;
+                    prestadorIdProcesado = prestadorDTO.getId();
+                } catch (IllegalArgumentException e) {
+                    prestadorWarnings.add(e.getMessage());
+                    log.warn("Payload de alta de prestador inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    prestadorWarnings.add("Error procesando alta de prestador: " + e.getMessage());
+                    log.error("Error procesando alta de prestador desde webhook", e);
+                }
+            }
+
             // Guardamos SIEMPRE lo recibido (parsed + raw + headers + resultado del ACK)
             Map<String, Object> ackMetadata = new java.util.HashMap<>();
             ackMetadata.put("performed", ackOutcome.performed());
@@ -125,6 +152,13 @@ public class WebhookTestController {
             if (solicitudIdCreada != null) {
                 storedPayload.put("solicitudId", solicitudIdCreada);
             }
+            storedPayload.put("prestadorProcesado", prestadorProcesado);
+            if (prestadorIdProcesado != null) {
+                storedPayload.put("prestadorId", prestadorIdProcesado);
+            }
+            if (!prestadorWarnings.isEmpty()) {
+                storedPayload.put("prestadorWarnings", prestadorWarnings);
+            }
 
             WebhookEvent stored = webhookEventService.storeEvent(
                     topic, eventName, messageId, subscriptionId, storedPayload
@@ -138,6 +172,13 @@ public class WebhookTestController {
             responsePayload.put("solicitudCreada", solicitudCreada);
             if (solicitudIdCreada != null) {
                 responsePayload.put("solicitudId", solicitudIdCreada);
+            }
+            responsePayload.put("prestadorProcesado", prestadorProcesado);
+            if (prestadorIdProcesado != null) {
+                responsePayload.put("prestadorId", prestadorIdProcesado);
+            }
+            if (!prestadorWarnings.isEmpty()) {
+                responsePayload.put("prestadorWarnings", prestadorWarnings);
             }
             if (ackOutcome.performed()) {
                 responsePayload.put("ackStatus", ackOutcome.statusCode());
@@ -261,6 +302,54 @@ public class WebhookTestController {
 
     private String firstNonNull(String a, String b) {
         return a != null ? a : b;
+    }
+
+    private PrestadorDTO buildPrestadorDtoFromAlta(PrestadorAltaWebhookDTO evento, List<String> warnings) {
+        if (evento == null) {
+            throw new IllegalArgumentException("payload vacío para alta de prestador");
+        }
+        if (evento.getId() == null) {
+            throw new IllegalArgumentException("payload.id requerido para alta de prestador");
+        }
+
+        String nombre = sanitizeOrFallback(evento.getNombre(), "nombre", warnings, "Sin nombre");
+        String apellido = sanitizeOrFallback(evento.getApellido(), "apellido", warnings, "Sin apellido");
+        String email = sanitizeOrFallback(
+                evento.getEmail(),
+                "email",
+                warnings,
+                "sin-email-" + evento.getId() + "@desconocido.local"
+        );
+        String telefono = sanitizeOrFallback(evento.getTelefono(), "telefono", warnings, "-");
+        String direccion = sanitizeOrFallback(evento.getDireccion(), "direccion", warnings, "Sin direccion");
+        String estado = (evento.getActivo() != null && evento.getActivo() == 1) ? "ACTIVO" : "INACTIVO";
+        if (evento.getActivo() == null) {
+            warnings.add("payload.activo ausente, se asumió estado INACTIVO");
+        }
+        warnings.add("payload.precioHora ausente, se utilizó 0.0");
+
+        return PrestadorDTO.builder()
+                .id(evento.getId())
+                .nombre(nombre)
+                .apellido(apellido)
+                .email(email)
+                .telefono(telefono)
+                .direccion(direccion)
+                .estado(estado)
+                .precioHora(0.0)
+                .zonaId(null)
+                .habilidades(List.of())
+                .calificacion(List.of())
+                .trabajosFinalizados(0)
+                .build();
+    }
+
+    private String sanitizeOrFallback(String value, String fieldName, List<String> warnings, String fallback) {
+        if (value != null && !value.isBlank()) {
+            return value.trim();
+        }
+        warnings.add("payload." + fieldName + " ausente, se usó '" + fallback + "'");
+        return fallback;
     }
 
     private String getStackTrace(Throwable t) {
