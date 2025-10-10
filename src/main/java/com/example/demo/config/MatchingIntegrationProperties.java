@@ -63,12 +63,19 @@ public record MatchingIntegrationProperties(
                 .toList();
     }
 
-    public record AutoSubscription(String team, String domain, String action) {
+    public record AutoSubscription(String team, String domain, String action, String eventName) {
         private static AutoSubscription normalize(AutoSubscription input) {
+            String normalizedTeam = requireNonBlank(input.team, "team").toLowerCase(Locale.ROOT);
+            String normalizedDomain = requireNonBlank(input.domain, "domain").toLowerCase(Locale.ROOT);
+            String normalizedAction = requireNonBlank(input.action, "action").toLowerCase(Locale.ROOT);
+            String normalizedEventName = (input.eventName == null || input.eventName.isBlank())
+                    ? normalizedAction
+                    : input.eventName.trim();
             return new AutoSubscription(
-                    requireNonBlank(input.team, "team").toLowerCase(Locale.ROOT),
-                    requireNonBlank(input.domain, "domain").toLowerCase(Locale.ROOT),
-                    requireNonBlank(input.action, "action").toLowerCase(Locale.ROOT)
+                    normalizedTeam,
+                    normalizedDomain,
+                    normalizedAction,
+                    normalizedEventName
             );
         }
 
@@ -77,6 +84,10 @@ public record MatchingIntegrationProperties(
                 throw new IllegalStateException("Auto subscription " + propertyName + " must not be empty");
             }
             return value.trim();
+        }
+
+        public String eventNameOrAction() {
+            return (eventName == null || eventName.isBlank()) ? action : eventName;
         }
     }
 }

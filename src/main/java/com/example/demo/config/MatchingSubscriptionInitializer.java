@@ -47,14 +47,14 @@ public class MatchingSubscriptionInitializer implements ApplicationRunner {
         }
 
         var listResult = subscriptionService.listSubscriptions();
-        Set<String> existingTopics = new HashSet<>();
+        Set<String> existingTopicEvents = new HashSet<>();
         String normalizedWebhook = webhookUrl.trim();
         if (listResult.isSuccess()) {
             listResult.subscriptions().stream()
                     .filter(sub -> sub.topic() != null && sub.webhookUrl() != null)
                     .filter(sub -> normalizedWebhook.equalsIgnoreCase(sub.webhookUrl()))
-                    .map(sub -> sub.topic().toLowerCase(Locale.ROOT))
-                    .forEach(existingTopics::add);
+                    .map(sub -> buildTopicEventKey(sub.topic(), sub.eventName()))
+                    .forEach(existingTopicEvents::add);
         } else {
             log.warn("Could not verify existing matching subscriptions (status {}). Proceeding to subscribe anyway.",
                     listResult.status());
@@ -62,28 +62,42 @@ public class MatchingSubscriptionInitializer implements ApplicationRunner {
 
         for (var target : autoSubscriptions) {
             String topic = String.join(".", target.team(), target.domain(), target.action());
-            String topicKey = topic.toLowerCase(Locale.ROOT);
-            if (existingTopics.contains(topicKey)) {
-                log.info("Matching subscription already present for topic {} and webhook {}", topic, normalizedWebhook);
+            String desiredEventName = target.eventNameOrAction();
+            String key = buildTopicEventKey(topic, desiredEventName);
+            if (existingTopicEvents.contains(key)) {
+                log.info("Matching subscription already present for topic {} event {} and webhook {}",
+                        topic, desiredEventName, normalizedWebhook);
                 continue;
             }
 
-            var result = subscriptionService.subscribe(target.team(), target.domain(), target.action());
+            var result = subscriptionService.subscribe(
+                    target.team(),
+                    target.domain(),
+                    target.action(),
+                    target.eventNameOrAction()
+            );
             if (result.isSuccess()) {
                 log.info("Matching subscription ensured for topic {} (event {})", topic, result.eventName());
-                existingTopics.add(topicKey);
+                existingTopicEvents.add(buildTopicEventKey(topic, result.eventName()));
                 continue;
             }
 
             if (result.status() != null && result.status().is4xxClientError()
                     && result.errorBody() != null
                     && result.errorBody().toLowerCase(Locale.ROOT).contains("ya existe")) {
-                log.info("Matching subscription already exists according to API response for topic {}", topic);
-                existingTopics.add(topicKey);
+                log.info("Matching subscription already exists according to API response for topic {} event {}",
+                        topic, desiredEventName);
+                existingTopicEvents.add(key);
             } else {
                 log.error("Failed to ensure matching subscription for topic {}. Status={} error={}",
                         topic, result.status(), result.errorBody());
             }
         }
+    }
+
+    private static String buildTopicEventKey(String topic, String eventName) {
+        String topicPart = topic == null ? "" : topic.toLowerCase(Locale.ROOT);
+        String eventPart = eventName == null ? "" : eventName.toLowerCase(Locale.ROOT);
+        return topicPart + "|" + eventPart;
     }
 }

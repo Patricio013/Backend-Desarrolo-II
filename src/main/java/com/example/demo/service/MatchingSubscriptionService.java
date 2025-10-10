@@ -74,6 +74,10 @@ public class MatchingSubscriptionService {
     }
 
     public SubscriptionResult subscribe(String targetTeamName, String domain, String action) {
+        return subscribe(targetTeamName, domain, action, null);
+    }
+
+    public SubscriptionResult subscribe(String targetTeamName, String domain, String action, String eventName) {
         if (targetTeamName == null || domain == null || action == null) {
             throw new IllegalArgumentException("targetTeamName, domain and action must be provided");
         }
@@ -81,7 +85,10 @@ public class MatchingSubscriptionService {
         String normalizedDomain = domain.trim();
         String normalizedAction = action.trim();
         String topic = String.join(".", normalizedTeam, normalizedDomain, normalizedAction);
-        return subscribe(topic, normalizedAction);
+        String normalizedEventName = (eventName != null && !eventName.isBlank())
+                ? eventName.trim()
+                : normalizedAction;
+        return subscribe(topic, normalizedEventName);
     }
 
     public AckResult acknowledgeMessage(String messageId, String subscriptionId) {
