@@ -51,6 +51,7 @@ public class SolicitudService {
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
     @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
+    @Autowired private MatchingPublisherService matchingPublisherService;
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
@@ -134,7 +135,22 @@ public class SolicitudService {
     public List<SolicitudTop3Resultado> procesarTodasLasCreadas() {
         List<Solicitud> creadas = solicitudesClient.obtenerSolicitudesCreadas();
         log.info("Procesando {} solicitudes en estado CREADA", creadas.size());
-        return creadas.stream().map(this::procesarUnaSolicitud).collect(Collectors.toList());
+        List<SolicitudTop3Resultado> resultados = creadas.stream()
+            .map(this::procesarUnaSolicitud)
+            .collect(Collectors.toList());
+        try {
+            MatchingPublisherService.PublishResult publishResult = matchingPublisherService.publishSolicitudesTop3(resultados);
+            if (publishResult.success()) {
+                log.info("Evento top3 publicado messageId={} status={}", publishResult.messageId(), publishResult.status());
+            } else if (publishResult.messageId() == null) {
+                log.info("Publicación top3 omitida: {}", publishResult.errorMessage());
+            } else if (publishResult.errorMessage() != null) {
+                log.warn("Publicación top3 no exitosa status={} error={}", publishResult.status(), publishResult.errorMessage());
+            }
+        } catch (Exception e) {
+            log.error("Error inesperado al publicar evento top3", e);
+        }
+        return resultados;
     }
 
     private SolicitudTop3Resultado procesarUnaSolicitud(Solicitud solicitud) {

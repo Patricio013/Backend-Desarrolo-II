@@ -14,7 +14,12 @@ public record MatchingIntegrationProperties(
         String subscribePath,
         String ackPath,
         boolean autoSubscribeEnabled,
-        List<AutoSubscription> autoSubscriptions
+        List<AutoSubscription> autoSubscriptions,
+        boolean publishEnabled,
+        String publishPath,
+        String publishSource,
+        String publishTop3Channel,
+        String publishTop3EventName
 ) {
 
     public MatchingIntegrationProperties {
@@ -43,6 +48,23 @@ public record MatchingIntegrationProperties(
         }
 
         autoSubscriptions = normalize(autoSubscriptions);
+
+        if (publishPath == null || publishPath.isBlank()) {
+            publishPath = "/publish";
+        } else if (!publishPath.startsWith("/")) {
+            publishPath = "/" + publishPath;
+        }
+
+        if (publishSource == null || publishSource.isBlank()) {
+            publishSource = "matching";
+        }
+
+        if (publishTop3Channel == null || publishTop3Channel.isBlank()) {
+            throw new IllegalStateException("integrations.matching.publish-top3-channel must not be empty");
+        }
+        if (publishTop3EventName == null || publishTop3EventName.isBlank()) {
+            throw new IllegalStateException("integrations.matching.publish-top3-event must not be empty");
+        }
     }
 
     public boolean hasApiKey() {
