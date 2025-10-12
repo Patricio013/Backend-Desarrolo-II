@@ -66,7 +66,7 @@ public class WebhookTestController {
             );
 
             // Intento de ACK si hay datos suficientes
-            AckOutcome ackOutcome = attemptAckIfPossible(safePayload);
+            AckOutcome ackOutcome = attemptAckIfPossible(safePayload, headers);
 
             String topic = firstNonNull(
                     extractString(safePayload, "topic"),
@@ -234,12 +234,19 @@ public class WebhookTestController {
         return (t.startsWith("{") && t.endsWith("}")) || (t.startsWith("[") && t.endsWith("]"));
     }
 
-    private AckOutcome attemptAckIfPossible(Map<String, Object> payload) {
+    private AckOutcome attemptAckIfPossible(Map<String, Object> payload, Map<String, String> headers) {
         String messageId = extractString(payload, "msgId");
         if (messageId == null) {
             messageId = extractString(payload, "messageId");
         }
         String subscriptionId = extractString(payload, "subscriptionId");
+
+        if (messageId == null && headers != null) {
+            messageId = extractHeader(headers, "x-message-id", "x_msg_id", "message-id");
+        }
+        if (subscriptionId == null && headers != null) {
+            subscriptionId = extractHeader(headers, "x-subscription-id", "subscription-id");
+        }
 
         if (messageId == null || subscriptionId == null) {
             return AckOutcome.notPerformed();
@@ -281,6 +288,23 @@ public class WebhookTestController {
         Object value = payload.get(key);
         if (value instanceof Map<?, ?> map) {
             return (Map<String, Object>) map;
+        }
+        return null;
+    }
+
+    private String extractHeader(Map<String, String> headers, String... candidateNames) {
+        if (headers == null || headers.isEmpty()) return null;
+        for (String candidate : candidateNames) {
+            if (candidate == null) continue;
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                String headerName = entry.getKey();
+                if (headerName != null && headerName.equalsIgnoreCase(candidate)) {
+                    String value = entry.getValue();
+                    if (value != null && !value.isBlank()) {
+                        return value.trim();
+                    }
+                }
+            }
         }
         return null;
     }
