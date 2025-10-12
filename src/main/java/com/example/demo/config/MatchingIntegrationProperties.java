@@ -19,7 +19,9 @@ public record MatchingIntegrationProperties(
         String publishPath,
         String publishSource,
         String publishTop3Channel,
-        String publishTop3EventName
+        String publishTop3EventName,
+        String publishCotizacionesChannel,
+        String publishCotizacionesEventName
 ) {
 
     public MatchingIntegrationProperties {
@@ -64,6 +66,12 @@ public record MatchingIntegrationProperties(
         }
         if (publishTop3EventName == null || publishTop3EventName.isBlank()) {
             throw new IllegalStateException("integrations.matching.publish-top3-event must not be empty");
+        }
+        if (publishCotizacionesChannel == null || publishCotizacionesChannel.isBlank()) {
+            throw new IllegalStateException("integrations.matching.publish-cotizaciones-channel must not be empty");
+        }
+        if (publishCotizacionesEventName == null || publishCotizacionesEventName.isBlank()) {
+            throw new IllegalStateException("integrations.matching.publish-cotizaciones-event must not be empty");
         }
     }
 

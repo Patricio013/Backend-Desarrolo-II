@@ -73,6 +73,9 @@ public class CotizacionService {
     @Autowired
     private SolicitudService solicitudService;
 
+    @Autowired
+    private MatchingPublisherService matchingPublisherService;
+
     @Value("${solicitudes.cotizaciones.wait-minutes:5}")
     private long waitMinutes;
 
@@ -122,7 +125,8 @@ public class CotizacionService {
         List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
                 .findBySolicitud_IdAndRound(solicitud.getId(), currentRound);
         final int totalCotizaciones = cotizacionesSolicitud.size();
-        final boolean listoParaDespacho = totalCotizaciones == MIN_COTIZACIONES_BATCH;
+        final int objetivoCotizaciones = calcularObjetivoCotizaciones(solicitud);
+        final boolean listoParaDespacho = totalCotizaciones >= objetivoCotizaciones;
 
         if (listoParaDespacho) {
             // (1) Enviar al Core con las cotizaciones disponibles en un solo batch lógico
@@ -153,8 +157,22 @@ public class CotizacionService {
             if (!solicitud.isEsCritica() || totalCotizaciones == MIN_COTIZACIONES_BATCH) {
                 busquedasClient.indexarSolicitudCotizaciones(payload);
             }
+
+            if (created && totalCotizaciones == objetivoCotizaciones) {
+                MatchingPublisherService.PublishResult publishResult =
+                        matchingPublisherService.publishCotizaciones(solicitud, cotizacionesSolicitud, objetivoCotizaciones);
+                if (publishResult.success()) {
+                    log.info("Cotizaciones publicadas al hub messageId={} status={}",
+                            publishResult.messageId(), publishResult.status());
+                } else if (publishResult.messageId() == null) {
+                    log.debug("Publicación de cotizaciones omitida: {}", publishResult.errorMessage());
+                } else {
+                    log.warn("Publicación de cotizaciones fallida status={} error={}",
+                            publishResult.status(), publishResult.errorMessage());
+                }
+            }
         } else {
-            if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones)) {
+            if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones, objetivoCotizaciones)) {
                 boolean invited = solicitudService.invitarPrestadorAdicional(solicitud);
                 if (invited) {
                     log.debug("Solicitud {}: se envió invitación adicional en round {}", solicitud.getId(), currentRound);
@@ -219,8 +237,8 @@ public class CotizacionService {
         // =================================================================
     }
 
-    private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones) {
-        if (totalCotizaciones >= MIN_COTIZACIONES_BATCH) {
+    private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones, int objetivoCotizaciones) {
+        if (totalCotizaciones >= objetivoCotizaciones) {
             return false;
         }
         LocalDateTime inicio = solicitud.getCotizacionRoundStartedAt();
@@ -230,6 +248,10 @@ public class CotizacionService {
         }
         Duration transcurrido = Duration.between(inicio, LocalDateTime.now());
         return transcurrido.compareTo(maxWaitBeforeExtraInvite) >= 0;
+    }
+
+    private int calcularObjetivoCotizaciones(Solicitud solicitud) {
+        return solicitud.getPrestadorAsignadoId() != null ? 1 : MIN_COTIZACIONES_BATCH;
     }
 
     /**
