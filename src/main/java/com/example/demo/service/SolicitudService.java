@@ -135,9 +135,30 @@ public class SolicitudService {
     public List<SolicitudTop3Resultado> procesarTodasLasCreadas() {
         List<Solicitud> creadas = solicitudesClient.obtenerSolicitudesCreadas();
         log.info("Procesando {} solicitudes en estado CREADA", creadas.size());
-        List<SolicitudTop3Resultado> resultados = creadas.stream()
+        return procesarSolicitudesInterno(creadas);
+    }
+
+    @Transactional
+    public List<SolicitudTop3Resultado> procesarSolicitudes(List<Solicitud> solicitudes) {
+        if (solicitudes == null || solicitudes.isEmpty()) {
+            return List.of();
+        }
+        return procesarSolicitudesInterno(solicitudes);
+    }
+
+    private List<SolicitudTop3Resultado> procesarSolicitudesInterno(List<Solicitud> solicitudes) {
+        List<SolicitudTop3Resultado> resultados = solicitudes.stream()
+            .filter(Objects::nonNull)
             .map(this::procesarUnaSolicitud)
             .collect(Collectors.toList());
+        publicarResultados(resultados);
+        return resultados;
+    }
+
+    private void publicarResultados(List<SolicitudTop3Resultado> resultados) {
+        if (resultados == null || resultados.isEmpty()) {
+            return;
+        }
         try {
             MatchingPublisherService.PublishResult publishResult = matchingPublisherService.publishSolicitudesTop3(resultados);
             if (publishResult.success()) {
@@ -150,7 +171,6 @@ public class SolicitudService {
         } catch (Exception e) {
             log.error("Error inesperado al publicar evento top3", e);
         }
-        return resultados;
     }
 
     private SolicitudTop3Resultado procesarUnaSolicitud(Solicitud solicitud) {
@@ -454,14 +474,33 @@ public class SolicitudService {
      */
     @Transactional
     public List<Solicitud> crearDesdeEventos(List<SolicitudesCreadasDTO> eventos) {
-        return eventos.stream()
+        List<CreacionResultado> resultados = eventos.stream()
             .map(this::mapearYGuardar)
+            .filter(Objects::nonNull)
+            .toList();
+
+        List<Solicitud> solicitudes = resultados.stream()
+            .map(CreacionResultado::solicitud)
+            .filter(Objects::nonNull)
             .collect(Collectors.toList());
+
+        List<Solicitud> nuevas = resultados.stream()
+            .filter(CreacionResultado::esNueva)
+            .map(CreacionResultado::solicitud)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        if (!nuevas.isEmpty()) {
+            procesarSolicitudes(nuevas);
+        }
+
+        return solicitudes;
     }
 
-    private Solicitud mapearYGuardar(SolicitudesCreadasDTO e) {
+    private CreacionResultado mapearYGuardar(SolicitudesCreadasDTO e) {
         if (solicitudRepository.existsById(e.getSolicitudId())) {
-            return solicitudRepository.findById(e.getSolicitudId()).orElse(null);
+            Solicitud existente = solicitudRepository.findById(e.getSolicitudId()).orElse(null);
+            return existente != null ? new CreacionResultado(existente, false) : null;
         }
 
         Solicitud.SolicitudBuilder b = Solicitud.builder()
@@ -499,7 +538,7 @@ public class SolicitudService {
                 Map.of()
             );
         } catch (Exception ignored) {}
-        return creada;
+        return new CreacionResultado(creada, true);
     }
 
     private Ventana parseVentana(String ventana) {
@@ -509,6 +548,8 @@ public class SolicitudService {
         LocalTime hasta = LocalTime.parse(p[1].trim());
         return new Ventana(desde, hasta);
     }
+
+    private record CreacionResultado(Solicitud solicitud, boolean esNueva) {}
 
     private record Ventana(LocalTime desde, LocalTime hasta) {}
 
