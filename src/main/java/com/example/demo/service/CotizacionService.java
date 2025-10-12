@@ -31,6 +31,7 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -170,6 +171,28 @@ public class CotizacionService {
                     log.warn("Publicación de cotizaciones fallida status={} error={}",
                             publishResult.status(), publishResult.errorMessage());
                 }
+
+                Map<String, Object> details = new HashMap<>();
+                details.put("solicitudId", solicitud.getId());
+                details.put("objetivoCotizaciones", objetivoCotizaciones);
+                details.put("totalCotizaciones", totalCotizaciones);
+                details.put("cotizaciones", cotizacionesSolicitud.stream()
+                        .map(c -> Map.of(
+                                "cotizacionId", c.getId(),
+                                "prestadorId", c.getPrestador().getId(),
+                                "monto", BigDecimal.valueOf(c.getValor()),
+                                "round", c.getRound()
+                        ))
+                        .toList());
+                details.put("enviadoABusquedas", true);
+
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        "SOLICITUD_COTIZACIONES_COMPLETAS",
+                        "Cotizaciones completas",
+                        "Se alcanzó el objetivo de cotizaciones y se envió a búsquedas",
+                        details
+                );
             }
         } else {
             if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones, objetivoCotizaciones)) {
