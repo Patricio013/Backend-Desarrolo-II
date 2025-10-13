@@ -359,9 +359,9 @@ jobs:
 
       - name: Descargar artefactos de JUnit y k6
         if: always()
-              uses: actions/download-artifact@v4
-              with:
-                path: ./artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./artifacts
 
 
       - name: Consolidar métricas para gh-pages (tolerante)
