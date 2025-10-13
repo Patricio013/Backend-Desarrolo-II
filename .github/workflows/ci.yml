@@ -357,6 +357,12 @@ jobs:
             echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
           fi
 
+  consolidate-and-deploy:
+    name: Consolidar y Desplegar Métricas
+    runs-on: ubuntu-latest
+    needs: e2e-tests 
+    if: always() 
+    steps:
       - name: Descargar artefactos de JUnit y k6
         if: always()
         uses: actions/download-artifact@v4
@@ -364,7 +370,7 @@ jobs:
           path: ./artifacts
 
 
-      - name: Consolidar métricas para gh-pages (tolerante)
+      - name: Consolidar métricas para gh-pages
         if: always()
         run: |
           mkdir -p metrics
@@ -409,7 +415,7 @@ jobs:
           # --- Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
 
-      - name: Deploy métricas a gh-pages (seguro)
+      - name: Deploy métricas a gh-pages
         if: always()
         run: |
           git config --global user.name "github-actions"
