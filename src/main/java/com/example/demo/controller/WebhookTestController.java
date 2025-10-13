@@ -112,8 +112,8 @@ public class WebhookTestController {
             List<String> zonaModificacionWarnings = new ArrayList<>();
             if (payloadSection != null
                     && topic != null
-                    && topic.equalsIgnoreCase("search.solicitud.created")
-                    && "created".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topic.equalsIgnoreCase("search.solicitud.creada")
+                    && "creada".equalsIgnoreCase(firstNonNull(eventName, ""))) {
                 try {
                     SolicitudesCreadasDTO solicitudDto = objectMapper.convertValue(payloadSection, SolicitudesCreadasDTO.class);
                     if (solicitudDto.getSolicitudId() != null) {
