@@ -3,11 +3,17 @@ package com.example.demo.controller;
 import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.PrestadorAltaWebhookDTO;
 import com.example.demo.dto.PrestadorDTO;
+import com.example.demo.dto.RubroAltaWebhookDTO;
+import com.example.demo.dto.RubroModificacionWebhookDTO;
+import com.example.demo.dto.ZonaAltaWebhookDTO;
+import com.example.demo.dto.ZonaModificacionWebhookDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.MatchingSubscriptionService;
 import com.example.demo.service.PrestadorSyncService;
+import com.example.demo.service.RubroSyncService;
+import com.example.demo.service.ZonaSyncService;
 import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +42,8 @@ public class WebhookTestController {
     private final WebhookEventService webhookEventService;
     private final SolicitudService solicitudService;
     private final PrestadorSyncService prestadorSyncService;
+    private final RubroSyncService rubroSyncService;
+    private final ZonaSyncService zonaSyncService;
     private final ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -90,6 +98,18 @@ public class WebhookTestController {
             boolean prestadorProcesado = false;
             Long prestadorIdProcesado = null;
             List<String> prestadorWarnings = new ArrayList<>();
+            boolean rubroProcesado = false;
+            Long rubroIdProcesado = null;
+            List<String> rubroWarnings = new ArrayList<>();
+            boolean rubroModificado = false;
+            Long rubroIdModificado = null;
+            List<String> rubroModificacionWarnings = new ArrayList<>();
+            boolean zonaProcesada = false;
+            Long zonaIdProcesada = null;
+            List<String> zonaWarnings = new ArrayList<>();
+            boolean zonaModificada = false;
+            Long zonaIdModificada = null;
+            List<String> zonaModificacionWarnings = new ArrayList<>();
             if (payloadSection != null
                     && topic != null
                     && topic.equalsIgnoreCase("search.solicitud.created")
@@ -132,6 +152,78 @@ public class WebhookTestController {
                 }
             }
 
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.rubro.alta")
+                    && "alta_rubro".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    RubroAltaWebhookDTO rubroAlta = objectMapper.convertValue(payloadSection, RubroAltaWebhookDTO.class);
+                    rubroSyncService.upsertDesdeDTO(rubroAlta);
+                    rubroProcesado = true;
+                    rubroIdProcesado = rubroAlta.getId();
+                } catch (IllegalArgumentException e) {
+                    rubroWarnings.add(e.getMessage());
+                    log.warn("Payload de alta de rubro inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    rubroWarnings.add("Error procesando alta de rubro: " + e.getMessage());
+                    log.error("Error procesando alta de rubro desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.rubro.modificacion")
+                    && "modificacion_rubro".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    RubroModificacionWebhookDTO rubroModificacion = objectMapper.convertValue(payloadSection, RubroModificacionWebhookDTO.class);
+                    rubroSyncService.actualizarDesdeDTO(rubroModificacion);
+                    rubroModificado = true;
+                    rubroIdModificado = rubroModificacion.getId();
+                } catch (IllegalArgumentException e) {
+                    rubroModificacionWarnings.add(e.getMessage());
+                    log.warn("Payload de modificación de rubro inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    rubroModificacionWarnings.add("Error procesando modificación de rubro: " + e.getMessage());
+                    log.error("Error procesando modificación de rubro desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.zona.alta")
+                    && "alta_zona".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    ZonaAltaWebhookDTO zonaAlta = objectMapper.convertValue(payloadSection, ZonaAltaWebhookDTO.class);
+                    zonaSyncService.upsertDesdeDTO(zonaAlta);
+                    zonaProcesada = true;
+                    zonaIdProcesada = zonaAlta.getId();
+                } catch (IllegalArgumentException e) {
+                    zonaWarnings.add(e.getMessage());
+                    log.warn("Payload de alta de zona inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    zonaWarnings.add("Error procesando alta de zona: " + e.getMessage());
+                    log.error("Error procesando alta de zona desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.zona.modificacion")
+                    && "modificacion_zona".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    ZonaModificacionWebhookDTO zonaModificacion = objectMapper.convertValue(payloadSection, ZonaModificacionWebhookDTO.class);
+                    zonaSyncService.actualizarDesdeDTO(zonaModificacion);
+                    zonaModificada = true;
+                    zonaIdModificada = zonaModificacion.getId();
+                } catch (IllegalArgumentException e) {
+                    zonaModificacionWarnings.add(e.getMessage());
+                    log.warn("Payload de modificación de zona inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    zonaModificacionWarnings.add("Error procesando modificación de zona: " + e.getMessage());
+                    log.error("Error procesando modificación de zona desde webhook", e);
+                }
+            }
+
             // Guardamos SIEMPRE lo recibido (parsed + raw + headers + resultado del ACK)
             Map<String, Object> ackMetadata = new java.util.HashMap<>();
             ackMetadata.put("performed", ackOutcome.performed());
@@ -159,6 +251,34 @@ public class WebhookTestController {
             if (!prestadorWarnings.isEmpty()) {
                 storedPayload.put("prestadorWarnings", prestadorWarnings);
             }
+            storedPayload.put("rubroProcesado", rubroProcesado);
+            if (rubroIdProcesado != null) {
+                storedPayload.put("rubroId", rubroIdProcesado);
+            }
+            if (!rubroWarnings.isEmpty()) {
+                storedPayload.put("rubroWarnings", rubroWarnings);
+            }
+            storedPayload.put("rubroModificado", rubroModificado);
+            if (rubroIdModificado != null) {
+                storedPayload.put("rubroIdModificado", rubroIdModificado);
+            }
+            if (!rubroModificacionWarnings.isEmpty()) {
+                storedPayload.put("rubroModificacionWarnings", rubroModificacionWarnings);
+            }
+            storedPayload.put("zonaProcesada", zonaProcesada);
+            if (zonaIdProcesada != null) {
+                storedPayload.put("zonaId", zonaIdProcesada);
+            }
+            if (!zonaWarnings.isEmpty()) {
+                storedPayload.put("zonaWarnings", zonaWarnings);
+            }
+            storedPayload.put("zonaModificada", zonaModificada);
+            if (zonaIdModificada != null) {
+                storedPayload.put("zonaIdModificada", zonaIdModificada);
+            }
+            if (!zonaModificacionWarnings.isEmpty()) {
+                storedPayload.put("zonaModificacionWarnings", zonaModificacionWarnings);
+            }
 
             WebhookEvent stored = webhookEventService.storeEvent(
                     topic, eventName, messageId, subscriptionId, storedPayload
@@ -179,6 +299,34 @@ public class WebhookTestController {
             }
             if (!prestadorWarnings.isEmpty()) {
                 responsePayload.put("prestadorWarnings", prestadorWarnings);
+            }
+            responsePayload.put("rubroProcesado", rubroProcesado);
+            if (rubroIdProcesado != null) {
+                responsePayload.put("rubroId", rubroIdProcesado);
+            }
+            if (!rubroWarnings.isEmpty()) {
+                responsePayload.put("rubroWarnings", rubroWarnings);
+            }
+            responsePayload.put("rubroModificado", rubroModificado);
+            if (rubroIdModificado != null) {
+                responsePayload.put("rubroIdModificado", rubroIdModificado);
+            }
+            if (!rubroModificacionWarnings.isEmpty()) {
+                responsePayload.put("rubroModificacionWarnings", rubroModificacionWarnings);
+            }
+            responsePayload.put("zonaProcesada", zonaProcesada);
+            if (zonaIdProcesada != null) {
+                responsePayload.put("zonaId", zonaIdProcesada);
+            }
+            if (!zonaWarnings.isEmpty()) {
+                responsePayload.put("zonaWarnings", zonaWarnings);
+            }
+            responsePayload.put("zonaModificada", zonaModificada);
+            if (zonaIdModificada != null) {
+                responsePayload.put("zonaIdModificada", zonaIdModificada);
+            }
+            if (!zonaModificacionWarnings.isEmpty()) {
+                responsePayload.put("zonaModificacionWarnings", zonaModificacionWarnings);
             }
             if (ackOutcome.performed()) {
                 responsePayload.put("ackStatus", ackOutcome.statusCode());
@@ -268,7 +416,6 @@ public class WebhookTestController {
         return value.toString();
     }
 
-    @SuppressWarnings("unchecked")
     private String extractNestedString(Map<String, Object> payload, String key, String nestedKey) {
         if (payload == null) return null;
         Object raw = payload.get(key);
