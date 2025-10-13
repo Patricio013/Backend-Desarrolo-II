@@ -2,7 +2,7 @@ name: CI - Backend JUnit + k6 + Cypress
 
 on:
   push:
-    branches: [ main, master, tests ]
+    branches: [ main, master, tests, DevOps ]
   pull_request:
 
 permissions:
@@ -72,6 +72,14 @@ jobs:
           echo "| $T | $F | $E | $S |" >> $GITHUB_STEP_SUMMARY
           echo "📂 Archivos analizados: ${#REPORTS[@]}" >> $GITHUB_STEP_SUMMARY
 
+      - name: Subir artefactos JUnit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-results
+          path: |
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.xml
 
   k6-load:
     name: k6 (smoke/stress/soak/spike)
@@ -250,6 +258,8 @@ jobs:
     name: Cypress E2E
     runs-on: ubuntu-latest
     needs: k6-load
+    permissions:
+      contents: write
     services:
       postgres:
         image: postgres:15
@@ -300,15 +310,13 @@ jobs:
       - name: Install node-fetch (fix Cypress config)
         run: npm install node-fetch@2
 
-      - name: Run Cypress
+      - name: Run Cypress tests
         run: |
           mkdir -p out/cypress
           npx cypress run \
-            --reporter mocha-json-reporter \
-            --reporter-options output=out/cypress/results.json \
-            | tee cypress.log || true
-      
-      
+            --reporter json-stream \
+            --reporter-options "output=out/cypress/results.json" \
+            > cypress.log || true
 
       - name: Subir artefactos Cypress
         uses: actions/upload-artifact@v4
@@ -316,33 +324,44 @@ jobs:
         with:
           name: cypress-results
           path: |
-            out/cypress/results.json
+            out/cypress/
             cypress.log
-            cypress/videos
+            cypress/videos/
 
-      - name: Cypress Summary (logs simplificados)
+      - name: Resumen Cypress
         if: always()
         run: |
           echo "## Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f "out/cypress/results.json" ]; then
+            # Instalar jq si no está presente
+            sudo apt-get update > /dev/null && sudo apt-get install -y jq > /dev/null
+            
+            # Extraer estadísticas del JSON
+            total=$(jq -s 'map(select(.[0] == "end")) | .[0][1].stats.tests' out/cypress/results.json)
+            passed=$(jq -s 'map(select(.[0] == "end")) | .[0][1].stats.passes' out/cypress/results.json)
+            failed=$(jq -s 'map(select(.[0] == "end")) | .[0][1].stats.failures' out/cypress/results.json)
+            skipped=$(jq -s 'map(select(.[0] == "end")) | .[0][1].stats.pending' out/cypress/results.json)
+            duration=$(jq -s 'map(select(.[0] == "end")) | .[0][1].stats.duration' out/cypress/results.json)
 
-          # Saco colores ANSI
-          clean_log=$(sed 's/\x1b\[[0-9;]*m//g' cypress.log)
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
+            echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
+            echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
 
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-                  echo "### Specs" >> $GITHUB_STEP_SUMMARY
-                  echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
-                  echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
-                  echo "$clean_log" | grep -E "✔|✖" | awk '{printf "| %s | %s | %s | %s |\n",$2,$3,$4,$5}' >> $GITHUB_STEP_SUMMARY
-        
-                  echo "" >> $GITHUB_STEP_SUMMARY
-
+            if [ "$failed" -gt 0 ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
+              jq -s 'map(select(.[0] == "test" and .[1].state == "failed")) | .[] | .[1].title' out/cypress/results.json | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
+          fi
 
       - name: Descargar artefactos de JUnit y k6
               if: always()
               uses: actions/download-artifact@v4
               with:
-                path: ./out
+                path: ./artifacts
 
 
       - name: Consolidar métricas para gh-pages (tolerante)
@@ -351,8 +370,8 @@ jobs:
           mkdir -p metrics
 
           # --- JUnit ---
-          junit_reports=$(find . -type f -path "*/target/surefire-reports/*.xml" -o -path "*/target/failsafe-reports/*.xml" || true)
-          if [ -n "$junit_reports" ]; then
+          junit_reports_path="artifacts/junit-results"
+          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f)" ]; then
             totals=$(awk -F'"' '
               /<testsuite / {
                 for (i=1;i<=NF;i++) {
@@ -363,7 +382,7 @@ jobs:
                 }
               }
               END { printf "%d %d %d %d\n", T, F, E, S }
-            ' $junit_reports)
+            ' $(find $junit_reports_path -type f))
             T=$(echo "$totals" | awk '{print $1}')
             F=$(echo "$totals" | awk '{print $2}')
             E=$(echo "$totals" | awk '{print $3}')
@@ -374,23 +393,21 @@ jobs:
           fi
 
           # --- k6 ---
-          if [ -d "out/k6" ] && ls out/k6/*.json >/dev/null 2>&1; then
-            jq -s '{tests: .}' out/k6/*.json > metrics/k6.json
+          if [ -d "artifacts/k6-summaries" ] && ls artifacts/k6-summaries/*.json >/dev/null 2>&1; then
+            jq -s '{tests: .}' artifacts/k6-summaries/*.json > metrics/k6.json
           else
             echo '{ "tests": [] }' > metrics/k6.json
           fi
 
           # --- Cypress ---
-          if [ -f "out/cypress/results.json" ]; then
-            cp out/cypress/results.json metrics/cypress.json
+          if [ -f "artifacts/cypress-results/out/cypress/results.json" ]; then
+            jq -s '.' artifacts/cypress-results/out/cypress/results.json > metrics/cypress.json
           else
             echo '{ "results": [] }' > metrics/cypress.json
           fi
 
           # --- Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
-
-
 
       - name: Deploy métricas a gh-pages (seguro)
         if: always()
@@ -412,6 +429,3 @@ jobs:
 
           # Pushear usando el token de Actions
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
-
-
-                                                                                                                                                                                            
