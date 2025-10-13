@@ -377,7 +377,7 @@ jobs:
 
           # --- JUnit ---
           junit_reports_path="artifacts/junit-results"
-          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f)" ]; then
+          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f -name '*.xml')" ]; then
             totals=$(awk -F'"' '
               /<testsuite / {
                 for (i=1;i<=NF;i++) {
@@ -388,7 +388,7 @@ jobs:
                 }
               }
               END { printf "%d %d %d %d\n", T, F, E, S }
-            ' $(find $junit_reports_path -type f))
+            ' $(find $junit_reports_path -type f -name '*.xml'))
             T=$(echo "$totals" | awk '{print $1}')
             F=$(echo "$totals" | awk '{print $2}')
             E=$(echo "$totals" | awk '{print $3}')
@@ -399,21 +399,24 @@ jobs:
           fi
 
           # --- k6 ---
-          if [ -d "artifacts/k6-summaries" ] && ls artifacts/k6-summaries/*.json >/dev/null 2>&1; then
-            jq -s '{tests: .}' artifacts/k6-summaries/*.json > metrics/k6.json
+          k6_path="artifacts/k6-summaries"
+          if [ -d "$k6_path" ] && ls $k6_path/*.json >/dev/null 2>&1; then
+            jq -s '{tests: .}' $k6_path/*.json > metrics/k6.json
           else
             echo '{ "tests": [] }' > metrics/k6.json
           fi
 
           # --- Cypress ---
-          if [ -f "artifacts/cypress-results/out/cypress/results.json" ]; then
-            jq -s '.' artifacts/cypress-results/out/cypress/results.json > metrics/cypress.json
+          cypress_path="artifacts/cypress-results/out/cypress/results.json"
+          if [ -f "$cypress_path" ]; then
+            cp "$cypress_path" metrics/cypress.json
           else
             echo '{ "results": [] }' > metrics/cypress.json
           fi
 
           # --- Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
+
 
       - name: Deploy métricas a gh-pages
         if: always()
