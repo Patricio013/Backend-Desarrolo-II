@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.List;
 
 @RestController
-@RequestMapping("/prestadores-sync")
+@RequestMapping("/api/prestadores-sync")
 @RequiredArgsConstructor
 @Slf4j
 
