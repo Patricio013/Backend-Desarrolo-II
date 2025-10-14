@@ -318,7 +318,12 @@ jobs:
           npx cypress run \
             --reporter mocha-json-reporter \
             --reporter-options output=out/cypress/results.json \
+            --config video=false \
             | tee cypress.log || true
+
+          echo "✅ Cypress terminó. Contenido parcial del JSON:"
+          head -n 20 out/cypress/results.json || echo "⚠️ No se generó el JSON"
+
 
       - name: Subir artefactos Cypress
         uses: actions/upload-artifact@v4
@@ -333,28 +338,45 @@ jobs:
       - name: Resumen Cypress
         if: always()
         run: |
-          echo "## Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-          if [ -f "out/cypress/results.json" ]; then
-            sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
-            total=$(jq '.stats.tests' out/cypress/results.json)
-            passed=$(jq '.stats.passes' out/cypress/results.json)
-            failed=$(jq '.stats.failures' out/cypress/results.json)
-            skipped=$(jq '.stats.pending' out/cypress/results.json)
-            duration=$(jq '.stats.duration' out/cypress/results.json)
+          echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
+
+          sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
+          CYPRESS_JSON="out/cypress/results.json"
+
+          if [ -f "$CYPRESS_JSON" ]; then
+            echo "📦 Leyendo resultados desde $CYPRESS_JSON"
+
+            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
+            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
+            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
+            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
+            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
 
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
             echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
             echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
 
+            # Guardar JSON para métricas
+            jq -n \
+              --argjson total "$total" \
+              --argjson passed "$passed" \
+              --argjson failed "$failed" \
+              --argjson skipped "$skipped" \
+              --argjson duration "$duration" \
+              '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
+              > metrics/cypress.json
+
             if [ "$failed" -gt 0 ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
-              jq -r '.results[].suites[].tests[] | select(.state=="failed") | "- \(.title)"' out/cypress/results.json >> $GITHUB_STEP_SUMMARY
+              jq -r '.results[].suites[].tests[] | select(.state=="failed") | "- \(.title)"' "$CYPRESS_JSON" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
+
 
 
       - name: Descargar artefactos de JUnit y k6
@@ -402,23 +424,10 @@ jobs:
 
 
           # --- 🧫 Cypress ---
-          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "results.json" | head -n 1)
-          if [ -n "$CYPRESS_JSON" ]; then
-            echo "📦 Consolidando Cypress desde $CYPRESS_JSON"
-            total=$(jq '.stats.tests' "$CYPRESS_JSON")
-            passed=$(jq '.stats.passes' "$CYPRESS_JSON")
-            failed=$(jq '.stats.failures' "$CYPRESS_JSON")
-            skipped=$(jq '.stats.pending' "$CYPRESS_JSON")
-            duration=$(jq '.stats.duration' "$CYPRESS_JSON")
-            jq -n \
-              --argjson total "$total" \
-              --argjson passed "$passed" \
-              --argjson failed "$failed" \
-              --argjson skipped "$skipped" \
-              --argjson duration "$duration" \
-              '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
-              > metrics/cypress.json
+          if [ -f "metrics/cypress.json" ]; then
+            echo "✅ Usando metrics/cypress.json existente"
           else
+            echo "⚠️ No se encontró metrics/cypress.json, generando vacío"
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
 
