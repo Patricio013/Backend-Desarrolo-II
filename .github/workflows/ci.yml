@@ -331,7 +331,7 @@ jobs:
         with:
           name: cypress-results
           path: |
-            out/cypress/cypress-results.json
+            out/cypress/results.json
             cypress.log
             cypress/videos/
 
@@ -341,7 +341,7 @@ jobs:
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
 
           sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
-          CYPRESS_JSON="out/cypress/cypress-results.json"
+          CYPRESS_JSON="out/cypress/results.json"
           mkdir -p metrics
 
           if [ -f "$CYPRESS_JSON" ]; then
@@ -371,7 +371,7 @@ jobs:
             if [ "$failed" -gt 0 ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
               echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
-              jq -r '.results[].suites[].tests[] | select(.state=="failed") | "- \(.title)"' "$CYPRESS_JSON" >> $GITHUB_STEP_SUMMARY
+              jq -r '.failures[] | "- \(.fullTitle)"' "$CYPRESS_JSON" >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
