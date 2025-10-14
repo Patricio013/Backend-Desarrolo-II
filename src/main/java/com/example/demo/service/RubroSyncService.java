@@ -33,19 +33,19 @@ public class RubroSyncService {
         }
 
         // Buscar rubro existente por ID
-        Rubro rubroExistente = rubroRepository.findById(dto.getId()).orElse(null);
+        Rubro rubroExistente = rubroRepository.findByExternalId(dto.getId()).orElse(null);
         
         if (rubroExistente != null) {
             // Actualizar rubro existente
-            log.info("Actualizando rubro existente: ID={}, nombre anterior={}, nombre nuevo={}", 
+            log.info("Actualizando rubro existente: extId={}, nombre anterior={}, nombre nuevo={}", 
                     dto.getId(), rubroExistente.getNombre(), dto.getNombre());
             rubroExistente.setNombre(dto.getNombre().trim());
             return rubroRepository.save(rubroExistente);
         } else {
             // Crear nuevo rubro
-            log.info("Creando nuevo rubro: ID={}, nombre={}", dto.getId(), dto.getNombre());
+            log.info("Creando nuevo rubro: extId={}, nombre={}", dto.getId(), dto.getNombre());
             Rubro nuevoRubro = Rubro.builder()
-                    .id(dto.getId())
+                    .externalId(dto.getId())
                     .nombre(dto.getNombre().trim())
                     .build();
             return rubroRepository.save(nuevoRubro);
@@ -64,7 +64,7 @@ public class RubroSyncService {
                 Rubro rubro = upsertDesdeDTO(dto);
                 resultados.add(rubro);
             } catch (Exception e) {
-                log.error("Error procesando rubro ID={}: {}", dto.getId(), e.getMessage(), e);
+                log.error("Error procesando rubro extId={}: {}", dto.getId(), e.getMessage(), e);
                 // Continuar con el siguiente rubro en caso de error
             }
         }
@@ -85,11 +85,11 @@ public class RubroSyncService {
         }
 
         // Buscar rubro existente por ID
-        Rubro rubroExistente = rubroRepository.findById(dto.getId())
+        Rubro rubroExistente = rubroRepository.findByExternalId(dto.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Rubro no encontrado para modificación: " + dto.getId()));
 
         // Actualizar rubro existente
-        log.info("Modificando rubro: ID={}, nombre anterior={}, nombre nuevo={}", 
+        log.info("Modificando rubro: extId={}, nombre anterior={}, nombre nuevo={}", 
                 dto.getId(), rubroExistente.getNombre(), dto.getNombre());
         rubroExistente.setNombre(dto.getNombre().trim());
         return rubroRepository.save(rubroExistente);
@@ -107,7 +107,7 @@ public class RubroSyncService {
                 Rubro rubro = actualizarDesdeDTO(dto);
                 resultados.add(rubro);
             } catch (Exception e) {
-                log.error("Error procesando modificación de rubro ID={}: {}", dto.getId(), e.getMessage(), e);
+                log.error("Error procesando modificación de rubro extId={}: {}", dto.getId(), e.getMessage(), e);
                 // Continuar con el siguiente rubro en caso de error
             }
         }
@@ -115,3 +115,4 @@ public class RubroSyncService {
         return resultados;
     }
 }
+

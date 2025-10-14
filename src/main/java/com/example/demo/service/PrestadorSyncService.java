@@ -33,7 +33,7 @@ public class PrestadorSyncService {
   public Prestador upsertDesdeDTO(PrestadorDTO dto) {
     // 1) Zona
     Zona zona = (dto.getZonaId() != null)
-        ? zonaRepository.findById(dto.getZonaId())
+        ? zonaRepository.findByExternalId(dto.getZonaId())
             .orElseThrow(() -> new IllegalArgumentException("Zona no encontrada: " + dto.getZonaId()))
         : null;
 
@@ -41,7 +41,8 @@ public class PrestadorSyncService {
     List<Habilidad> habilidades = resolveOrCreateHabilidades(dto.getHabilidades());
 
     // 3) Prestador (upsert)
-    Prestador p = prestadorRepository.findById(dto.getId()).orElseGet(() -> new Prestador(dto.getId()));
+    Prestador p = prestadorRepository.findByExternalId(dto.getId()).orElseGet(Prestador::new);
+    p.setId(dto.getId()); // guardar ID externo
     p.setNombre(dto.getNombre());
     p.setApellido(dto.getApellido());
     p.setEmail(dto.getEmail());
@@ -82,23 +83,25 @@ public class PrestadorSyncService {
       Habilidad resolved = null;
 
       if (hIn.getId() != null) {
-        resolved = habilidadRepository.findById(hIn.getId()).orElse(null);
+        // Interpretamos hIn.id como ID externo recibido
+        resolved = habilidadRepository.findByExternalId(hIn.getId()).orElse(null);
       }
 
       if (resolved == null) {
         String nombre = Objects.requireNonNull(hIn.getNombre(), "Habilidad.nombre requerido");
-        Long rubroId = Objects.requireNonNull(
+        Long rubroExtId = Objects.requireNonNull(
             hIn.getRubro() != null ? hIn.getRubro().getId() : null,
             "Habilidad.rubro.id requerido"
         );
 
-        resolved = habilidadRepository.findByNombreAndRubro(nombre, rubroId)
+        resolved = habilidadRepository.findByNombreAndRubro(nombre, rubroExtId)
             .orElseGet(() -> {
-              Rubro rubro = rubroRepository.findById(rubroId)
-                  .orElseThrow(() -> new IllegalArgumentException("Rubro inexistente: " + rubroId));
+              Rubro rubro = rubroRepository.findByExternalId(rubroExtId)
+                  .orElseThrow(() -> new IllegalArgumentException("Rubro inexistente: " + rubroExtId));
               Habilidad nueva = new Habilidad();
               nueva.setNombre(nombre);
               nueva.setRubro(rubro);
+              nueva.setExternalId(hIn.getId());
               return habilidadRepository.save(nueva);
             });
       }

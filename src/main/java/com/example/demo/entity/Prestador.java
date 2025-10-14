@@ -14,7 +14,14 @@ import java.util.ArrayList;
 @Builder
 public class Prestador {
 
+    // ID interno autogenerado (PK)
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "internal_id")
+    private Long internalId;
+
+    // ID externo recibido en los mensajes
+    @Column(name = "external_id", unique = true)
     private Long id;
 
     @Column(nullable = false, length = 100)

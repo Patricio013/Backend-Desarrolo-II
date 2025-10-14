@@ -33,19 +33,19 @@ public class ZonaSyncService {
         }
 
         // Buscar zona existente por ID
-        Zona zonaExistente = zonaRepository.findById(dto.getId()).orElse(null);
+        Zona zonaExistente = zonaRepository.findByExternalId(dto.getId()).orElse(null);
         
         if (zonaExistente != null) {
             // Actualizar zona existente
-            log.info("Actualizando zona existente: ID={}, nombre anterior={}, nombre nuevo={}", 
+            log.info("Actualizando zona existente: extId={}, nombre anterior={}, nombre nuevo={}", 
                     dto.getId(), zonaExistente.getNombre(), dto.getNombre());
             zonaExistente.setNombre(dto.getNombre().trim());
             return zonaRepository.save(zonaExistente);
         } else {
             // Crear nueva zona
-            log.info("Creando nueva zona: ID={}, nombre={}", dto.getId(), dto.getNombre());
+            log.info("Creando nueva zona: extId={}, nombre={}", dto.getId(), dto.getNombre());
             Zona nuevaZona = Zona.builder()
-                    .id(dto.getId())
+                    .externalId(dto.getId())
                     .nombre(dto.getNombre().trim())
                     .build();
             return zonaRepository.save(nuevaZona);
@@ -64,7 +64,7 @@ public class ZonaSyncService {
                 Zona zona = upsertDesdeDTO(dto);
                 resultados.add(zona);
             } catch (Exception e) {
-                log.error("Error procesando zona ID={}: {}", dto.getId(), e.getMessage(), e);
+                log.error("Error procesando zona extId={}: {}", dto.getId(), e.getMessage(), e);
                 // Continuar con la siguiente zona en caso de error
             }
         }
@@ -85,11 +85,11 @@ public class ZonaSyncService {
         }
 
         // Buscar zona existente por ID
-        Zona zonaExistente = zonaRepository.findById(dto.getId())
+        Zona zonaExistente = zonaRepository.findByExternalId(dto.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Zona no encontrada para modificación: " + dto.getId()));
 
         // Actualizar zona existente
-        log.info("Modificando zona: ID={}, nombre anterior={}, nombre nuevo={}", 
+        log.info("Modificando zona: extId={}, nombre anterior={}, nombre nuevo={}", 
                 dto.getId(), zonaExistente.getNombre(), dto.getNombre());
         zonaExistente.setNombre(dto.getNombre().trim());
         return zonaRepository.save(zonaExistente);
@@ -107,7 +107,7 @@ public class ZonaSyncService {
                 Zona zona = actualizarDesdeDTO(dto);
                 resultados.add(zona);
             } catch (Exception e) {
-                log.error("Error procesando modificación de zona ID={}: {}", dto.getId(), e.getMessage(), e);
+                log.error("Error procesando modificación de zona extId={}: {}", dto.getId(), e.getMessage(), e);
                 // Continuar con la siguiente zona en caso de error
             }
         }
@@ -115,3 +115,4 @@ public class ZonaSyncService {
         return resultados;
     }
 }
+

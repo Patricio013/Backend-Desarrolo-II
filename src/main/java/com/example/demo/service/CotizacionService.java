@@ -92,18 +92,18 @@ public class CotizacionService {
     @Transactional
     public void recibirCotizacion(CotizacionesSubmit in) {
 
-        var prestador = prestadorRepository.findById(in.getPrestadorId())
+        var prestador = prestadorRepository.findByExternalId(in.getPrestadorId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Prestador no encontrado: " + in.getPrestadorId()));
 
-        var solicitud = solicitudRepository.findById(in.getSolicitudId())
+        var solicitud = solicitudRepository.findByExternalId(in.getSolicitudId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Solicitud no encontrada: " + in.getSolicitudId()));
 
         final int currentRound = solicitud.getCotizacionRound();
 
         var existente = cotizacionRepository
-                .findByPrestador_IdAndSolicitud_IdAndRound(in.getPrestadorId(), in.getSolicitudId(), currentRound);
+                .findByPrestador_IdAndSolicitud_IdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
 
         Cotizacion cotizacion;
         boolean created;
@@ -124,7 +124,7 @@ public class CotizacionService {
         cotizacion = cotizacionRepository.save(cotizacion);
 
         List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
-                .findBySolicitud_IdAndRound(solicitud.getId(), currentRound);
+                .findBySolicitud_IdAndRound(solicitud.getInternalId(), currentRound);
         final int totalCotizaciones = cotizacionesSolicitud.size();
         final int objetivoCotizaciones = calcularObjetivoCotizaciones(solicitud);
         final boolean listoParaDespacho = totalCotizaciones >= objetivoCotizaciones;
@@ -285,11 +285,11 @@ public class CotizacionService {
     public SolicitudPagoDTO aceptarYAsignar(SolicitudAsignarDTO in) {
         if (in == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Body requerido");
 
-        var solicitud = solicitudRepository.findById(in.getSolicitudId())
+        var solicitud = solicitudRepository.findByExternalId(in.getSolicitudId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Solicitud no encontrada: " + in.getSolicitudId()));
 
-        var prestador = prestadorRepository.findById(in.getPrestadorId())
+        var prestador = prestadorRepository.findByExternalId(in.getPrestadorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Prestador no encontrado: " + in.getPrestadorId()));
 
@@ -302,8 +302,7 @@ public class CotizacionService {
         }
 
         // Debe existir una cotización de ese prestador para esa solicitud
-        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_IdAndRound(
-                in.getPrestadorId(), in.getSolicitudId(), currentRound);
+        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_IdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
         var cotizacion = opt.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "No existe cotización del prestador " + in.getPrestadorId() + " para la solicitud " + in.getSolicitudId()));
 
@@ -377,3 +376,4 @@ public class CotizacionService {
         return pagoDTO;
     }
 }
+

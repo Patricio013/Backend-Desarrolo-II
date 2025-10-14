@@ -55,7 +55,7 @@ public class SolicitudService {
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
-        Solicitud solicitud = solicitudRepository.findById(solicitudId)
+        Solicitud solicitud = solicitudRepository.findByExternalId(solicitudId)
             .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + solicitudId));
 
         if (solicitud.getEstado() != EstadoSolicitud.CANCELADA) {
@@ -243,7 +243,7 @@ public class SolicitudService {
     }
 
     private SolicitudTop3Resultado procesarConPrestadorAsignado(Solicitud solicitud, Long prestadorId) {
-        Prestador p = prestadorRepository.findById(prestadorId).orElse(null);
+        Prestador p = prestadorRepository.findByExternalId(prestadorId).orElse(null);
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
@@ -426,7 +426,7 @@ public class SolicitudService {
     }
 
     public void cancelarPorId(Long solicitudId){
-        Optional<Solicitud> Opt = solicitudRepository.findById(solicitudId);
+        Optional<Solicitud> Opt = solicitudRepository.findByExternalId(solicitudId);
         Solicitud s = Opt.get();
 
         if (Opt.isEmpty()){
@@ -499,7 +499,7 @@ public class SolicitudService {
 
     private CreacionResultado mapearYGuardar(SolicitudesCreadasDTO e) {
         if (solicitudRepository.existsById(e.getSolicitudId())) {
-            Solicitud existente = solicitudRepository.findById(e.getSolicitudId()).orElse(null);
+            Solicitud existente = solicitudRepository.findByExternalId(e.getSolicitudId()).orElse(null);
             return existente != null ? new CreacionResultado(existente, false) : null;
         }
 
@@ -634,7 +634,8 @@ public class SolicitudService {
     }
 
     public Solicitud obtenerDetalle(Long id) {
-        return solicitudRepository.findById(id)
+        return solicitudRepository.findByExternalId(id)
                 .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + id));
     }
 }
+

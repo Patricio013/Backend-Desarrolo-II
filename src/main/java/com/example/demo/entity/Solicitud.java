@@ -16,8 +16,15 @@ import com.example.demo.entity.enums.EstadoSolicitud;
 @Builder
 public class Solicitud {
 
+    // ID interno autogenerado (PK)
     @Id
-    private Long id; // este es el "solicitud_id" que viene del Core
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "internal_id")
+    private Long internalId;
+
+    // ID externo recibido en los mensajes (solicitud_id del Core)
+    @Column(name = "external_id", unique = true)
+    private Long id;
 
     @Column(nullable = false)
     private Long usuarioId;
