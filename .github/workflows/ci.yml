@@ -331,7 +331,7 @@ jobs:
         with:
           name: cypress-results
           path: |
-            out/cypress/results.json
+            out/cypress/cypress-results.json
             cypress.log
             cypress/videos/
 
@@ -341,7 +341,7 @@ jobs:
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
 
           sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
-          CYPRESS_JSON="out/cypress/*.json"
+          CYPRESS_JSON="out/cypress/cypress-results.json"
           mkdir -p metrics
 
           if [ -f "$CYPRESS_JSON" ]; then
