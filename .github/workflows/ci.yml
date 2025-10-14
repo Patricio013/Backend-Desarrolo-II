@@ -339,43 +339,22 @@ jobs:
         if: always()
         run: |
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-
-          sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
-          CYPRESS_JSON="out/cypress/results.json"
-          mkdir -p metrics
-
-          if [ -f "$CYPRESS_JSON" ]; then
-            echo "📦 Leyendo resultados desde $CYPRESS_JSON"
-
-            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
-            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
-            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
-            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
-            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
-
+          
+          if [ -f "cypress.log" ]; then
+            # Saca colores ANSI para un parseo limpio
+            clean_log=$(sed 's/\x1b\[[0-9;]*m//g' cypress.log)
+            
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
-            echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
-            echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
-
-            # Guardar JSON para métricas
-            jq -n \
-              --argjson total "$total" \
-              --argjson passed "$passed" \
-              --argjson failed "$failed" \
-              --argjson skipped "$skipped" \
-              --argjson duration "$duration" \
-              '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
-              > metrics/cypress.json
-
-            if [ "$failed" -gt 0 ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "### ❌ Failed tests" >> $GITHUB_STEP_SUMMARY
-              jq -r '.failures[] | "- \(.fullTitle)"' "$CYPRESS_JSON" >> $GITHUB_STEP_SUMMARY
-            fi
+            echo "### Specs" >> $GITHUB_STEP_SUMMARY
+            echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
+            echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
+            
+            # Busca las líneas de resumen de specs (que contienen ✔ o ✖) y las formatea en una tabla
+            # Nota: Este awk asume un formato de salida específico de Cypress.
+            echo "$clean_log" | grep -E "✔|✖" | awk '{ if ($2 != "All") printf "| %s | %s | %s | %s |\n", $2, $3, $4, $5 }' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
           else
-            echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
+            echo "_⚠️ No se encontró el archivo cypress.log para generar el resumen._" >> $GITHUB_STEP_SUMMARY
           fi
 
 
@@ -425,10 +404,23 @@ jobs:
 
 
           # --- 🧫 Cypress ---
-          if [ -f "metrics/cypress.json" ]; then
-            echo "✅ Usando metrics/cypress.json existente"
+          CYPRESS_JSON="out/cypress/results.json"
+          if [ -f "$CYPRESS_JSON" ]; then
+            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
+            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
+            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
+            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
+            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
+            jq -n \
+              --argjson total "$total" \
+              --argjson passed "$passed" \
+              --argjson failed "$failed" \
+              --argjson skipped "$skipped" \
+              --argjson duration "$duration" \
+              '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
+              > metrics/cypress.json
           else
-            echo "⚠️ No se encontró metrics/cypress.json, generando vacío"
+            echo "⚠️ No se encontró $CYPRESS_JSON, generando métricas vacías para Cypress."
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
 
