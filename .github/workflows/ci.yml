@@ -254,7 +254,7 @@ jobs:
           printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
           
 
-     e2e-tests:
+  e2e-tests:
     name: Cypress E2E
     runs-on: ubuntu-latest
     needs: k6-load
