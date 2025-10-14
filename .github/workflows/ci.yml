@@ -406,11 +406,12 @@ jobs:
           # --- 🧫 Cypress ---
           CYPRESS_JSON="artifacts/cypress-results/out/cypress/results.json"
           if [ -f "$CYPRESS_JSON" ]; then
-            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
-            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
-            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
-            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
-            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
+            total=$(jq '[.results[].suites[].tests[]] | length' "$CYPRESS_JSON")
+            passed=$(jq '[.results[].suites[].tests[] | select(.state=="passed")] | length' "$CYPRESS_JSON")
+            failed=$(jq '[.results[].suites[].tests[] | select(.state=="failed")] | length' "$CYPRESS_JSON")
+            skipped=$(jq '[.results[].suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length' "$CYPRESS_JSON")
+            duration=$(jq '[.results[].suites[].tests[].duration // 0] | add' "$CYPRESS_JSON")
+
             jq -n \
               --argjson total "$total" \
               --argjson passed "$passed" \
@@ -423,6 +424,7 @@ jobs:
             echo "⚠️ No se encontró $CYPRESS_JSON, generando métricas vacías para Cypress."
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
+
 
 
           # --- 🕒 Metadata ---
