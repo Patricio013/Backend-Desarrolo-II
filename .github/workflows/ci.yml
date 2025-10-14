@@ -81,7 +81,6 @@ jobs:
             **/target/surefire-reports/*.xml
             **/target/failsafe-reports/*.xml
 
-
   k6-load:
     name: k6 (smoke/stress/soak/spike)
     runs-on: ubuntu-latest
@@ -358,12 +357,6 @@ jobs:
             echo "_⚠️ No Cypress results found._" >> $GITHUB_STEP_SUMMARY
           fi
 
-  consolidate-and-deploy:
-    name: Consolidar y Desplegar Métricas
-    runs-on: ubuntu-latest
-    needs: e2e-tests 
-    if: always() 
-    steps:
       - name: Descargar artefactos de JUnit y k6
         if: always()
         uses: actions/download-artifact@v4
@@ -371,14 +364,14 @@ jobs:
           path: ./artifacts
 
 
-      - name: Consolidar métricas para gh-pages
+      - name: Consolidar métricas para gh-pages (tolerante)
         if: always()
         run: |
           mkdir -p metrics
 
           # --- JUnit ---
           junit_reports_path="artifacts/junit-results"
-          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f -name '*.xml')" ]; then
+          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f)" ]; then
             totals=$(awk -F'"' '
               /<testsuite / {
                 for (i=1;i<=NF;i++) {
@@ -389,7 +382,7 @@ jobs:
                 }
               }
               END { printf "%d %d %d %d\n", T, F, E, S }
-            ' $(find $junit_reports_path -type f -name '*.xml'))
+            ' $(find $junit_reports_path -type f))
             T=$(echo "$totals" | awk '{print $1}')
             F=$(echo "$totals" | awk '{print $2}')
             E=$(echo "$totals" | awk '{print $3}')
@@ -400,17 +393,15 @@ jobs:
           fi
 
           # --- k6 ---
-          k6_path="artifacts/k6-summaries"
-          if [ -d "$k6_path" ] && ls $k6_path/*.json >/dev/null 2>&1; then
-            jq -s '{tests: .}' $k6_path/*.json > metrics/k6.json
+          if [ -d "artifacts/k6-summaries" ] && ls artifacts/k6-summaries/*.json >/dev/null 2>&1; then
+            jq -s '{tests: .}' artifacts/k6-summaries/*.json > metrics/k6.json
           else
             echo '{ "tests": [] }' > metrics/k6.json
           fi
 
           # --- Cypress ---
-          cypress_path="artifacts/cypress-results/out/cypress/results.json"
-          if [ -f "$cypress_path" ]; then
-            cp "$cypress_path" metrics/cypress.json
+          if [ -f "artifacts/cypress-results/out/cypress/results.json" ]; then
+            jq -s '.' artifacts/cypress-results/out/cypress/results.json > metrics/cypress.json
           else
             echo '{ "results": [] }' > metrics/cypress.json
           fi
@@ -418,8 +409,7 @@ jobs:
           # --- Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
 
-
-      - name: Deploy métricas a gh-pages
+      - name: Deploy métricas a gh-pages (seguro)
         if: always()
         run: |
           git config --global user.name "github-actions"
