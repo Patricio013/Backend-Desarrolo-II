@@ -314,15 +314,16 @@ jobs:
 
       - name: Run Cypress tests
         run: |
-          mkdir -p out/cypress
+          mkdir -p $PWD/out/cypress
           npx cypress run \
             --reporter mocha-json-reporter \
-            --reporter-options output=out/cypress/results.json \
+            --reporter-options "output=$PWD/out/cypress/results.json" \
             --config video=false \
             | tee cypress.log || true
 
-          echo "✅ Cypress terminó. Contenido parcial del JSON:"
-          head -n 20 out/cypress/results.json || echo "⚠️ No se generó el JSON"
+          echo "✅ Cypress terminó. Mostrando primeras líneas del JSON:"
+          head -n 20 $PWD/out/cypress/results.json || echo "⚠️ No se generó el JSON"
+
 
 
       - name: Subir artefactos Cypress
