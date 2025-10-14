@@ -359,14 +359,14 @@ jobs:
 
 
 
-      - name: Descargar artefactos de JUnit y k6
+      - name: Descargar todos los artefactos de prueba
         if: always()
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
 
-      - name: Consolidar métricas para gh-pages (tolerante)
+      - name: Consolidar y desplegar métricas a gh-pages
         if: always()
         run: |
           mkdir -p metrics
@@ -404,7 +404,7 @@ jobs:
 
 
           # --- 🧫 Cypress ---
-          CYPRESS_JSON="out/cypress/results.json"
+          CYPRESS_JSON="artifacts/cypress-results/out/cypress/results.json"
           if [ -f "$CYPRESS_JSON" ]; then
             total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
             passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
@@ -428,10 +428,6 @@ jobs:
           # --- 🕒 Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
 
-
-      - name: Deploy métricas a gh-pages (seguro)
-        if: always()
-        run: |
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
 
