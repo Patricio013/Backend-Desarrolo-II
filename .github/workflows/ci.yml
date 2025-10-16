@@ -411,33 +411,16 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Extrayendo métricas globales desde cypress.log"
-
-          clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
-
-          # Buscar la última línea con el resumen tipo "✖  5 of 5 failed (100%) ..."
-          summary_line=$(echo "$clean_log" | grep -E "failed" | tail -1)
-
-          total=$(echo "$summary_line" | awk '{print $9}' 2>/dev/null || echo 0)
-          failed=$(echo "$summary_line" | awk '{print $6}' 2>/dev/null || echo 0)
-          passed=$(echo "$summary_line" | awk '{print $3}' 2>/dev/null || echo 0)
-          skipped=$(echo "$summary_line" | awk '{print $11}' 2>/dev/null || echo 0)
-          duration=$(echo "$summary_line" | awk '{print $8}' 2>/dev/null || echo 0)
-
-          jq -n \
-            --argjson total "${total:-0}" \
-            --argjson passed "${passed:-0}" \
-            --argjson failed "${failed:-0}" \
-            --argjson skipped "${skipped:-0}" \
-            --arg duration "$duration" \
-            '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
-            > metrics/cypress.json
-
-          echo "✅ Métricas guardadas:"
-          cat metrics/cypress.json
+          echo "🧹 Limpiando colores ANSI del log de Cypress..."
+          
+          # Crear carpeta destino y limpiar colores ANSI
+          mkdir -p metrics/logs
+          sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log > metrics/logs/cypress-clean.log
+          
+          echo "✅ Log limpio guardado en metrics/logs/cypress-clean.log"
           else
-            echo "⚠️ No se encontró cypress.log, generando métricas vacías."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": "0" }' > metrics/cypress.json
+            echo "⚠️ No se encontró artifacts/cypress-results/cypress.log"
+            echo "Sin log disponible" > metrics/logs/cypress-clean.log
           fi
 
           # --- 🕒 Metadata ---
