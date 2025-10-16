@@ -406,15 +406,30 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Buscando el último bloque JSON válido en cypress.log..."
+          echo "📊 Buscando último bloque JSON en artifacts/cypress-results/cypress.log ..."
           mkdir -p metrics
 
-          # Extrae todo el contenido JSON válido del log (incluso si hay texto mezclado)
-          last_json=$(grep -Poz '(?s)\{.*\}' artifacts/cypress-results/cypress.log | tail -n 1)
+          # Extraer el último bloque JSON bien formado (desde la última { hasta su cierre correspondiente })
+          awk '
+            /^{/ { in_json=1; json=""; depth=0 }
+            in_json {
+              json = json $0 ORS
+              depth += gsub(/{/, "{")
+              depth -= gsub(/}/, "}")
+              if (depth == 0 && in_json) {
+                last_json = json
+                in_json = 0
+              }
+            }
+            END {
+              if (last_json != "") print last_json
+            }
+          ' artifacts/cypress-results/cypress.log > metrics/cypress.json.raw
 
-          if [ -n "$last_json" ]; then
-            echo "$last_json" | jq . > metrics/cypress.json || echo "$last_json" > metrics/cypress.json
-            echo "✅ Último bloque JSON guardado en metrics/cypress.json"
+          # Si el archivo tiene algo más que una llave
+          if [ -s metrics/cypress.json.raw ] && [ "$(cat metrics/cypress.json.raw | tr -d '[:space:]')" != "}" ]; then
+            echo "✅ Bloque JSON detectado, formateando..."
+            cat metrics/cypress.json.raw | jq . > metrics/cypress.json || cp metrics/cypress.json.raw metrics/cypress.json
           else
             echo "⚠️ No se detectó JSON válido en el log, generando JSON vacío."
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
