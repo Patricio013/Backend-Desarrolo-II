@@ -10,6 +10,7 @@ import com.example.demo.dto.ZonaModificacionWebhookDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
+import com.example.demo.service.CotizacionService;
 import com.example.demo.service.MatchingSubscriptionService;
 import com.example.demo.service.PrestadorSyncService;
 import com.example.demo.service.RubroSyncService;
@@ -26,6 +27,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +43,7 @@ public class WebhookTestController {
     private final MatchingSubscriptionService subscriptionService;
     private final WebhookEventService webhookEventService;
     private final SolicitudService solicitudService;
+    private final CotizacionService cotizacionService;
     private final PrestadorSyncService prestadorSyncService;
     private final RubroSyncService rubroSyncService;
     private final ZonaSyncService zonaSyncService;
@@ -78,11 +81,17 @@ public class WebhookTestController {
 
             String topic = firstNonNull(
                     extractString(safePayload, "topic"),
-                    extractNestedString(safePayload, "destination", "channel")
+                    firstNonNull(
+                        extractString(safePayload, "topico"),
+                        extractNestedString(safePayload, "destination", "channel")
+                    )
             );
             String eventName = firstNonNull(
                     extractString(safePayload, "eventName"),
-                    extractNestedString(safePayload, "destination", "eventName")
+                    firstNonNull(
+                        extractString(safePayload, "evento"),
+                        extractNestedString(safePayload, "destination", "eventName")
+                    )
             );
             String messageId = firstNonNull(
                     extractString(safePayload, "msgId"),
@@ -93,8 +102,17 @@ public class WebhookTestController {
 
             // Intentamos crear una solicitud si viene payload compatible
             Map<String, Object> payloadSection = extractMap(safePayload, "payload");
+            if (payloadSection == null) {
+                payloadSection = extractMap(safePayload, "cuerpo");
+            }
             boolean solicitudCreada = false;
             Long solicitudIdCreada = null;
+            boolean solicitudCancelada = false;
+            Long solicitudIdCancelada = null;
+            List<String> solicitudCancelWarnings = new ArrayList<>();
+            boolean cotizacionAceptada = false;
+            Map<String, Object> cotizacionAceptadaDetails = null;
+            List<String> cotizacionAceptadaWarnings = new ArrayList<>();
             boolean prestadorProcesado = false;
             Long prestadorIdProcesado = null;
             List<String> prestadorWarnings = new ArrayList<>();
@@ -110,10 +128,13 @@ public class WebhookTestController {
             boolean zonaModificada = false;
             Long zonaIdModificada = null;
             List<String> zonaModificacionWarnings = new ArrayList<>();
-            if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("search.solicitud.creada")
-                    && "creada".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+            boolean isSolicitudCreadaEvento = eventName != null
+                && (eventName.equalsIgnoreCase("creada") || eventName.equalsIgnoreCase("solicitud.creada"));
+            boolean isSolicitudCreadaTopic = topic != null
+                && (topic.equalsIgnoreCase("search.solicitud.creada") || topic.equalsIgnoreCase("solicitud"));
+
+            if (payloadSection != null && isSolicitudCreadaEvento && isSolicitudCreadaTopic) {
+                // TODO(suscripciones): revisar combinación final de topic/evento cuando el proveedor lo defina
                 try {
                     SolicitudesCreadasDTO solicitudDto = objectMapper.convertValue(payloadSection, SolicitudesCreadasDTO.class);
                     if (solicitudDto.getSolicitudId() != null) {
@@ -130,6 +151,64 @@ public class WebhookTestController {
                     log.warn("No se pudo mapear payload de webhook a SolicitudesCreadasDTO: {}", e.getMessage());
                 } catch (Exception e) {
                     log.error("Error procesando creación de solicitud desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && eventName != null
+                    && eventName.equalsIgnoreCase("solicitud.cancelada")) {
+                // TODO(suscripciones): ajustar filtros/topic definitivos cuando esté definido el canal real
+                Long solicitudId = extractLong(payloadSection, "solicitud_id");
+                if (solicitudId == null) {
+                    solicitudCancelWarnings.add("solicitud_id ausente en evento de cancelación");
+                    log.warn("Evento solicitud.cancelada sin solicitud_id: {}", payloadSection);
+                } else {
+                    try {
+                        solicitudService.cancelarPorId(solicitudId);
+                        solicitudCancelada = true;
+                        solicitudIdCancelada = solicitudId;
+                    } catch (IllegalArgumentException | IllegalStateException e) {
+                        solicitudCancelWarnings.add(e.getMessage());
+                        log.warn("No se pudo cancelar la solicitud {}: {}", solicitudId, e.getMessage());
+                    } catch (Exception e) {
+                        solicitudCancelWarnings.add("Error inesperado al cancelar: " + e.getMessage());
+                        log.error("Error cancelando solicitud {} desde webhook", solicitudId, e);
+                    }
+                }
+            }
+
+            if (payloadSection != null
+                    && eventName != null
+                    && eventName.equalsIgnoreCase("cotizacion.aceptada")) {
+                // TODO(suscripciones): ajustar canal/tópico definitivo para eventos de cotización
+                Long solicitudId = extractLong(payloadSection, "solicitud_id");
+                Long prestadorId = extractLong(payloadSection, "prestador_id");
+                BigDecimal monto = extractBigDecimal(payloadSection, "monto");
+                if (solicitudId == null || prestadorId == null) {
+                    cotizacionAceptadaWarnings.add("solicitud_id o prestador_id ausentes en evento de cotizacion.aceptada");
+                    log.warn("Evento cotizacion.aceptada incompleto: {}", payloadSection);
+                } else {
+                    try {
+                        var dto = com.example.demo.dto.SolicitudAsignarDTO.builder()
+                            .solicitudId(solicitudId)
+                            .prestadorId(prestadorId)
+                            .monto(monto)
+                            .build();
+                        var pago = cotizacionService.aceptarYAsignar(dto);
+                        cotizacionAceptada = true;
+                        cotizacionAceptadaDetails = Map.of(
+                            "solicitudId", pago.getSolicitudId(),
+                            "prestadorId", pago.getPrestadorId(),
+                            "pagoId", pago.getId(),
+                            "cotizacionId", pago.getCotizacionId()
+                        );
+                    } catch (IllegalArgumentException | IllegalStateException e) {
+                        cotizacionAceptadaWarnings.add(e.getMessage());
+                        log.warn("Error validando cotizacion.aceptada {}: {}", solicitudId, e.getMessage());
+                    } catch (Exception e) {
+                        cotizacionAceptadaWarnings.add("Error inesperado al aceptar cotización: " + e.getMessage());
+                        log.error("Error aceptando cotización {}-{} desde webhook", solicitudId, prestadorId, e);
+                    }
                 }
             }
 
@@ -244,6 +323,20 @@ public class WebhookTestController {
             if (solicitudIdCreada != null) {
                 storedPayload.put("solicitudId", solicitudIdCreada);
             }
+            storedPayload.put("solicitudCancelada", solicitudCancelada);
+            if (solicitudIdCancelada != null) {
+                storedPayload.put("solicitudIdCancelada", solicitudIdCancelada);
+            }
+            if (!solicitudCancelWarnings.isEmpty()) {
+                storedPayload.put("solicitudCancelWarnings", solicitudCancelWarnings);
+            }
+            storedPayload.put("cotizacionAceptada", cotizacionAceptada);
+            if (cotizacionAceptadaDetails != null) {
+                storedPayload.put("cotizacionAceptadaDetails", cotizacionAceptadaDetails);
+            }
+            if (!cotizacionAceptadaWarnings.isEmpty()) {
+                storedPayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
+            }
             storedPayload.put("prestadorProcesado", prestadorProcesado);
             if (prestadorIdProcesado != null) {
                 storedPayload.put("prestadorId", prestadorIdProcesado);
@@ -292,6 +385,20 @@ public class WebhookTestController {
             responsePayload.put("solicitudCreada", solicitudCreada);
             if (solicitudIdCreada != null) {
                 responsePayload.put("solicitudId", solicitudIdCreada);
+            }
+            responsePayload.put("solicitudCancelada", solicitudCancelada);
+            if (solicitudIdCancelada != null) {
+                responsePayload.put("solicitudIdCancelada", solicitudIdCancelada);
+            }
+            if (!solicitudCancelWarnings.isEmpty()) {
+                responsePayload.put("solicitudCancelWarnings", solicitudCancelWarnings);
+            }
+            responsePayload.put("cotizacionAceptada", cotizacionAceptada);
+            if (cotizacionAceptadaDetails != null) {
+                responsePayload.put("cotizacionAceptadaDetails", cotizacionAceptadaDetails);
+            }
+            if (!cotizacionAceptadaWarnings.isEmpty()) {
+                responsePayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
             }
             responsePayload.put("prestadorProcesado", prestadorProcesado);
             if (prestadorIdProcesado != null) {
@@ -427,6 +534,44 @@ public class WebhookTestController {
             return nestedValue != null ? nestedValue.toString() : null;
         }
         return null;
+    }
+
+    private Long extractLong(Map<String, Object> payload, String key) {
+        if (payload == null) return null;
+        Object value = payload.get(key);
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number n) {
+            return n.longValue();
+        }
+        try {
+            String text = value.toString();
+            if (text == null || text.isBlank()) {
+                return null;
+            }
+            return Long.valueOf(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private BigDecimal extractBigDecimal(Map<String, Object> payload, String key) {
+        if (payload == null) return null;
+        Object value = payload.get(key);
+        if (value == null) return null;
+        if (value instanceof Number n) {
+            return BigDecimal.valueOf(n.doubleValue());
+        }
+        try {
+            String text = value.toString();
+            if (text == null || text.isBlank()) {
+                return null;
+            }
+            return new BigDecimal(text.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @SuppressWarnings("unchecked")

@@ -438,24 +438,27 @@ public class SolicitudService {
     }
 
     public void cancelarPorId(Long solicitudId){
-        Optional<Solicitud> Opt = solicitudRepository.findByExternalId(solicitudId);
-        Solicitud s = Opt.get();
-
-        if (Opt.isEmpty()){
-            System.out.println("solicitud no encontrada.");
-        }else if(s.getEstado() == EstadoSolicitud.COMPLETADA){
-            System.out.println("no se puede cancelar una solicitu completada.");
-        }else if (s.getEstado() == EstadoSolicitud.CANCELADA){
-            System.out.println("la solicitud ya esta cancelada.");
-        }else{
-            s.setEstado(EstadoSolicitud.CANCELADA);
-            System.out.println("solicitud cancelada correctamente");
+        if (solicitudId == null) {
+            throw new IllegalArgumentException("solicitudId requerido");
         }
-        s.setEstado(EstadoSolicitud.CANCELADA);
-        solicitudRepository.save(s);
-        // Notificar cancelación
+
+        Solicitud solicitud = solicitudRepository.findByExternalId(solicitudId)
+            .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + solicitudId));
+
+        EstadoSolicitud estadoActual = solicitud.getEstado();
+        if (estadoActual == EstadoSolicitud.COMPLETADA) {
+            throw new IllegalStateException("No se puede cancelar una solicitud completada");
+        }
+        if (estadoActual == EstadoSolicitud.CANCELADA) {
+            log.info("Solicitud {} ya estaba cancelada, no se realizaron cambios", solicitudId);
+            return;
+        }
+
+        solicitud.setEstado(EstadoSolicitud.CANCELADA);
+        solicitudRepository.save(solicitud);
+
         solicitudEventsPublisher.notifySolicitudEvent(
-            s,
+            solicitud,
             "SOLICITUD_STATUS_CHANGED",
             "Solicitud cancelada",
             "La solicitud fue cancelada",
