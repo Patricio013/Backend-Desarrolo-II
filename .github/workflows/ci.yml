@@ -405,50 +405,13 @@ jobs:
 
 
           # --- 🧫 Cypress ---
-          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "results.json" | head -n 1)
-
+          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "*.json" | sort | tail -n 1)
           if [ -n "$CYPRESS_JSON" ]; then
-            echo "📊 Procesando métricas desde $CYPRESS_JSON"
-
-            has_stats=$(jq 'has("stats")' "$CYPRESS_JSON")
-            if [ "$has_stats" = "true" ]; then
-              total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
-              passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
-              failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
-              skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
-              duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
-            else
-              total=$(jq '[.results[].suites[].tests[]] | length' "$CYPRESS_JSON")
-              passed=$(jq '[.results[].suites[].tests[] | select(.state=="passed")] | length' "$CYPRESS_JSON")
-              failed=$(jq '[.results[].suites[].tests[] | select(.state=="failed")] | length' "$CYPRESS_JSON")
-              skipped=$(jq '[.results[].suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length' "$CYPRESS_JSON")
-              duration=$(jq '[.results[].suites[].tests[].duration // 0] | add' "$CYPRESS_JSON")
-            fi
-
-            # 👇 Mapea el resumen por spec
-            summary=$(jq -c '[.results[] | {spec: .file, 
-                                            tests: ([.suites[].tests[]] | length), 
-                                            passed: ([.suites[].tests[] | select(.state=="passed")] | length), 
-                                            failed: ([.suites[].tests[] | select(.state=="failed")] | length), 
-                                            skipped: ([.suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length)
-                                          }]' "$CYPRESS_JSON")
-
-            # 👇 Guarda todo junto en metrics/cypress.json
-            jq -n \
-              --argjson total "$total" \
-              --argjson passed "$passed" \
-              --argjson failed "$failed" \
-              --argjson skipped "$skipped" \
-              --argjson duration "$duration" \
-              --argjson summary "$summary" \
-              '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration, summary: $summary}' \
-              > metrics/cypress.json
-
-            echo "✅ Métricas completas guardadas en metrics/cypress.json"
-            cat metrics/cypress.json
+            echo "📦 Copiando último resultado Cypress desde $CYPRESS_JSON"
+            cp "$CYPRESS_JSON" metrics/cypress.json
           else
-            echo "⚠️ No se encontró results.json, generando métricas vacías."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
+            echo "⚠️ No se encontró ningún results.json, generando vacío."
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
 
 
