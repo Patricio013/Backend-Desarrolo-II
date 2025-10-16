@@ -406,18 +406,23 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Extrayendo último bloque JSON del log de Cypress..."
-          last_json=$(awk '/^\{/{json=$0; next} /^\}/{print json "\n" $0; json=""; next} {if(json)json=json"\n"$0}' artifacts/cypress-results/cypress.log | tail -n +1 | tail -n 1)
-          
+          echo "📊 Buscando el último bloque JSON válido en cypress.log..."
+          mkdir -p metrics
+
+          # Extrae todo el contenido JSON válido del log (incluso si hay texto mezclado)
+          last_json=$(grep -Poz '(?s)\{.*\}' artifacts/cypress-results/cypress.log | tail -n 1)
+
           if [ -n "$last_json" ]; then
-            echo "$last_json" > metrics/cypress.json
+            echo "$last_json" | jq . > metrics/cypress.json || echo "$last_json" > metrics/cypress.json
+            echo "✅ Último bloque JSON guardado en metrics/cypress.json"
           else
+            echo "⚠️ No se detectó JSON válido en el log, generando JSON vacío."
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
           fi
-          else
-            echo "⚠️ No se encontró cypress.log, generando JSON vacío."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
-          fi
+        else
+          echo "⚠️ No se encontró cypress.log, generando JSON vacío."
+          echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
+        fi
 
 
 
