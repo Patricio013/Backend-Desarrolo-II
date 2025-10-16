@@ -406,40 +406,34 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Extrayendo métricas desde cypress.log"
+          echo "📊 Extrayendo métricas globales desde cypress.log"
 
           clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
 
-          # Extraer totales de la última línea del log
-          total=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $9}' || echo 0)
-          failed=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $6}' || echo 0)
-          passed=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $3}' || echo 0)
-          skipped=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $11}' || echo 0)
-          duration=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $8}' || echo 0)
+          # Buscar la última línea con el resumen tipo "✖  5 of 5 failed (100%) ..."
+          summary_line=$(echo "$clean_log" | grep -E "failed" | tail -1)
 
-          # Armar resumen por spec
-          summary=$(echo "$clean_log" | grep -E "cy\.js" | awk '{
-            gsub(/\x1b\[[0-9;]*m/,"");
-            printf "{\"spec\":\"%s\",\"tests\":%s,\"failed\":%s},", $2, $8, $10
-          }' | sed 's/,$//')
+          total=$(echo "$summary_line" | awk '{print $9}' 2>/dev/null || echo 0)
+          failed=$(echo "$summary_line" | awk '{print $6}' 2>/dev/null || echo 0)
+          passed=$(echo "$summary_line" | awk '{print $3}' 2>/dev/null || echo 0)
+          skipped=$(echo "$summary_line" | awk '{print $11}' 2>/dev/null || echo 0)
+          duration=$(echo "$summary_line" | awk '{print $8}' 2>/dev/null || echo 0)
 
           jq -n \
             --argjson total "${total:-0}" \
             --argjson passed "${passed:-0}" \
             --argjson failed "${failed:-0}" \
             --argjson skipped "${skipped:-0}" \
-            --argjson duration "${duration:-0}" \
-            --argjson summary "[$summary]" \
-            '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration, summary: $summary}' \
+            --arg duration "$duration" \
+            '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration}' \
             > metrics/cypress.json
 
-          echo "✅ Métricas extraídas desde el log:"
+          echo "✅ Métricas guardadas:"
           cat metrics/cypress.json
           else
             echo "⚠️ No se encontró cypress.log, generando métricas vacías."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": "0" }' > metrics/cypress.json
           fi
-
 
           # --- 🕒 Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
