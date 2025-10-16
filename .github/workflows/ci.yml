@@ -254,12 +254,13 @@ jobs:
 #          printf "| %s | %s | %.4f |\n" "$totalReqs" "$avgP95" "$globalFailRate" >> $GITHUB_STEP_SUMMARY
 #          
 
-  e2e-tests:
+    e2e-tests:
     name: Cypress E2E
     runs-on: ubuntu-latest
     needs: backend-tests
     permissions:
       contents: write
+
     services:
       postgres:
         image: postgres:15
@@ -273,6 +274,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+
     env:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
@@ -310,21 +312,39 @@ jobs:
 
       - name: Install reporters
         run: |
-          npm install mocha mocha-json-reporter
+          npm install cypress-mochawesome-reporter --save-dev
+
+      - name: Configure Cypress reporter
+        run: |
+          echo "📄 Creando configuración para cypress-mochawesome-reporter"
+          cat > cypress.config.js <<'JS'
+          const { defineConfig } = require('cypress')
+          module.exports = defineConfig({
+            reporter: 'cypress-mochawesome-reporter',
+            reporterOptions: {
+              reportDir: 'out/cypress',
+              overwrite: true,
+              html: false,
+              json: true
+            },
+            e2e: {
+              setupNodeEvents(on, config) {
+                require('cypress-mochawesome-reporter/plugin')(on)
+              },
+            },
+          })
+          JS
 
       - name: Run Cypress tests
         run: |
-          mkdir -p $PWD/out/cypress
-          npx cypress run \
-            --reporter mocha-json-reporter \
-            --reporter-options "output=$PWD/out/cypress/results.json" \
-            --config video=false \
-            | tee cypress.log || true
+          mkdir -p out/cypress
+          npx cypress run --config video=false || true
 
-          echo "✅ Cypress terminó. Mostrando primeras líneas del JSON:"
-          head -n 20 $PWD/out/cypress/results.json || echo "⚠️ No se generó el JSON"
-
-
+          echo "✅ Cypress finalizó. Buscando JSON generado..."
+          find out/cypress -type f -name "*.json" -exec echo "📄 {}" \;
+          ls -lh out/cypress
+          echo "---- Preview ----"
+          head -n 20 $(find out/cypress -type f -name "*.json" | head -n 1) || echo "⚠️ Sin contenido JSON"
 
       - name: Subir artefactos Cypress
         uses: actions/upload-artifact@v4
@@ -332,40 +352,37 @@ jobs:
         with:
           name: cypress-results
           path: |
-            out/cypress/results.json
+            out/cypress/*.json
             cypress.log
-            cypress/videos/
 
       - name: Resumen Cypress
         if: always()
         run: |
           echo "## 🧪 Cypress E2E Summary" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f "cypress.log" ]; then
-            # Saca colores ANSI para un parseo limpio
-            clean_log=$(sed 's/\x1b\[[0-9;]*m//g' cypress.log)
-            
+
+          CYPRESS_JSON=$(find out/cypress -type f -name "*.json" | head -n 1)
+          if [ -n "$CYPRESS_JSON" ]; then
+            sudo apt-get update -y > /dev/null && sudo apt-get install -y jq > /dev/null
+
+            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
+            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
+            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
+            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
+            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
+
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "### Specs" >> $GITHUB_STEP_SUMMARY
-            echo '| Spec | Tests | Passing | Failing |' >> $GITHUB_STEP_SUMMARY
-            echo '|------|-------:|--------:|--------:|' >> $GITHUB_STEP_SUMMARY
-            
-            # Busca las líneas de resumen de specs (que contienen ✔ o ✖) y las formatea en una tabla
-            # Nota: Este awk asume un formato de salida específico de Cypress.
-            echo "$clean_log" | grep -E "✔|✖" | awk '{ if ($2 != "All") printf "| %s | %s | %s | %s |\n", $2, $3, $4, $5 }' >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Total | Passed | Failed | Skipped | Duration (ms) |" >> $GITHUB_STEP_SUMMARY
+            echo "|------:|-------:|-------:|--------:|--------------:|" >> $GITHUB_STEP_SUMMARY
+            echo "| $total | $passed | $failed | $skipped | $duration |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "_⚠️ No se encontró el archivo cypress.log para generar el resumen._" >> $GITHUB_STEP_SUMMARY
+            echo "_⚠️ No se encontró el JSON de Cypress._" >> $GITHUB_STEP_SUMMARY
           fi
-
-
 
       - name: Descargar todos los artefactos de prueba
         if: always()
         uses: actions/download-artifact@v4
         with:
           path: ./artifacts
-
 
       - name: Consolidar y desplegar métricas a gh-pages
         if: always()
@@ -395,37 +412,17 @@ jobs:
             echo "{ \"total\": 0, \"failures\": 0, \"errors\": 0, \"skipped\": 0 }" > metrics/junit.json
           fi
 
-
-          # --- 📊 k6 ---
-          if [ -d "artifacts/k6-summaries" ] && ls artifacts/k6-summaries/*.json >/dev/null 2>&1; then
-            jq -s '{tests: .}' artifacts/k6-summaries/*.json > metrics/k6.json
-          else
-            echo '{ "tests": [] }' > metrics/k6.json
-          fi
-
-
           # --- 🧫 Cypress ---
-          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "results.json" | head -n 1)
-
+          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "*.json" | head -n 1)
           if [ -n "$CYPRESS_JSON" ]; then
             echo "📊 Procesando métricas desde $CYPRESS_JSON"
 
-            has_stats=$(jq 'has("stats")' "$CYPRESS_JSON")
-            if [ "$has_stats" = "true" ]; then
-              total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
-              passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
-              failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
-              skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
-              duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
-            else
-              total=$(jq '[.results[].suites[].tests[]] | length' "$CYPRESS_JSON")
-              passed=$(jq '[.results[].suites[].tests[] | select(.state=="passed")] | length' "$CYPRESS_JSON")
-              failed=$(jq '[.results[].suites[].tests[] | select(.state=="failed")] | length' "$CYPRESS_JSON")
-              skipped=$(jq '[.results[].suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length' "$CYPRESS_JSON")
-              duration=$(jq '[.results[].suites[].tests[].duration // 0] | add' "$CYPRESS_JSON")
-            fi
+            total=$(jq '.stats.tests // 0' "$CYPRESS_JSON")
+            passed=$(jq '.stats.passes // 0' "$CYPRESS_JSON")
+            failed=$(jq '.stats.failures // 0' "$CYPRESS_JSON")
+            skipped=$(jq '.stats.pending // 0' "$CYPRESS_JSON")
+            duration=$(jq '.stats.duration // 0' "$CYPRESS_JSON")
 
-            # 👇 Mapea el resumen por spec
             summary=$(jq -c '[.results[] | {spec: .file, 
                                             tests: ([.suites[].tests[]] | length), 
                                             passed: ([.suites[].tests[] | select(.state=="passed")] | length), 
@@ -433,7 +430,6 @@ jobs:
                                             skipped: ([.suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length)
                                           }]' "$CYPRESS_JSON")
 
-            # 👇 Guarda todo junto en metrics/cypress.json
             jq -n \
               --argjson total "$total" \
               --argjson passed "$passed" \
@@ -451,8 +447,6 @@ jobs:
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
           fi
 
-
-
           # --- 🕒 Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
 
@@ -461,12 +455,9 @@ jobs:
 
           mkdir -p .ghpages-temp
           cp -r metrics/* .ghpages-temp/
-
           cd .ghpages-temp
           git init
           git checkout -b gh-pages
-
           git add .
           git commit -m "📊 Update metrics $(date -u +%FT%TZ)"
-
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
