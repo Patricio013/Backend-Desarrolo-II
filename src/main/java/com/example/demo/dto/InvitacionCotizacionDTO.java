@@ -11,6 +11,7 @@ import java.time.LocalDateTime;
 public class InvitacionCotizacionDTO {
     private Long solicitudId;
     private Long rubroId;           // corresponde a categoriaId de la Solicitud
+    private Long habilidadId;       // habilidad solicitada (externa)
     private Long prestadorId;
     private Long cotizacionId;
     private String prestadorNombre; // nombre + apellido del prestador

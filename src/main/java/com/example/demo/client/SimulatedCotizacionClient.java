@@ -12,9 +12,12 @@ public class SimulatedCotizacionClient {
 
     public boolean enviarInvitacion(InvitacionCotizacionDTO dto) {
         // Simulación de llamada a sistema externo: log + retorno exitoso
-        log.info("[Simulado] Invitando prestador {} a cotizar solicitud {} (rubro {}) - {}",
-                dto.getPrestadorId(), dto.getSolicitudId(), dto.getRubroId(), dto.getMensaje());
+        log.info("[Simulado] Invitando prestador {} a cotizar solicitud {} (habilidad {} rubro {}) - {}",
+                dto.getPrestadorId(),
+                dto.getSolicitudId(),
+                dto.getHabilidadId(),
+                dto.getRubroId(),
+                dto.getMensaje());
         return true;
     }
 }
-

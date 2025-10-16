@@ -16,6 +16,7 @@ import com.example.demo.websocket.SolicitudEventsPublisher;      // <-- ajustá 
 import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudRepository;
+import com.example.demo.repository.SolicitudInvitacionRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -77,6 +79,9 @@ public class CotizacionService {
     @Autowired
     private MatchingPublisherService matchingPublisherService;
 
+    @Autowired
+    private SolicitudInvitacionRepository solicitudInvitacionRepository;
+
     @Value("${solicitudes.cotizaciones.wait-minutes:5}")
     private long waitMinutes;
 
@@ -103,7 +108,7 @@ public class CotizacionService {
         final int currentRound = solicitud.getCotizacionRound();
 
         var existente = cotizacionRepository
-                .findByPrestador_IdAndSolicitud_IdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
+                .findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
 
         Cotizacion cotizacion;
         boolean created;
@@ -124,7 +129,7 @@ public class CotizacionService {
         cotizacion = cotizacionRepository.save(cotizacion);
 
         List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
-                .findBySolicitud_IdAndRound(solicitud.getInternalId(), currentRound);
+                .findBySolicitud_InternalIdAndRound(solicitud.getInternalId(), currentRound);
         final int totalCotizaciones = cotizacionesSolicitud.size();
         final int objetivoCotizaciones = calcularObjetivoCotizaciones(solicitud);
         final boolean listoParaDespacho = totalCotizaciones >= objetivoCotizaciones;
@@ -274,7 +279,25 @@ public class CotizacionService {
     }
 
     private int calcularObjetivoCotizaciones(Solicitud solicitud) {
-        return solicitud.getPrestadorAsignadoId() != null ? 1 : MIN_COTIZACIONES_BATCH;
+        if (solicitud.getPrestadorAsignadoId() != null) {
+            return 1;
+        }
+
+        int objetivoBase = MIN_COTIZACIONES_BATCH;
+        int round = solicitud.getCotizacionRound();
+        List<Long> invitadosRound = solicitudInvitacionRepository
+            .findPrestadorIdsBySolicitudAndRound(solicitud.getId(), round);
+        if (invitadosRound == null || invitadosRound.isEmpty()) {
+            return objetivoBase;
+        }
+        long disponibles = invitadosRound.stream()
+            .filter(Objects::nonNull)
+            .distinct()
+            .count();
+        if (disponibles <= 0) {
+            return objetivoBase;
+        }
+        return (int) Math.min(objetivoBase, disponibles);
     }
 
     /**
@@ -302,7 +325,7 @@ public class CotizacionService {
         }
 
         // Debe existir una cotización de ese prestador para esa solicitud
-        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_IdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
+        var opt = cotizacionRepository.findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
         var cotizacion = opt.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "No existe cotización del prestador " + in.getPrestadorId() + " para la solicitud " + in.getSolicitudId()));
 
@@ -376,4 +399,3 @@ public class CotizacionService {
         return pagoDTO;
     }
 }
-

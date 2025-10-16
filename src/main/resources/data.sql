@@ -18,7 +18,11 @@ INSERT INTO habilidad (id, external_id, nombre, rubro_id) VALUES
   (1, 1, 'Reparacion de canerias', 1),
   (2, 2, 'Instalacion de sanitarios', 1),
   (3, 3, 'Cableado electrico', 2),
-  (4, 4, 'Pintura de interiores', 3)
+  (4, 4, 'Pintura de interiores', 3),
+  (5, 5, 'Emergencias electricas', 2),
+  (6, 6, 'Barnizado exterior', 3),
+  (7, 7, 'Destapaciones', 1),
+  (8, 120, 'Cambio en el baño', 1)
 ON CONFLICT (id) DO NOTHING;
 
 -- =========================
@@ -43,7 +47,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO prestador (internal_id, external_id, nombre, apellido, email, telefono, direccion, estado, precio_hora, zona_id, trabajos_finalizados) VALUES
   (1, 1, 'Juan','Perez','juan.perez@mail.com','111111111','Dir 1','ACTIVO',1500,1,12),
   (2, 2, 'Maria','Gomez','maria.gomez@mail.com','111111112','Dir 2','ACTIVO',1800,2,22),
-  (3, 3, 'Carlos','Lopez','carlos.lopez@mail.com','111111113','Dir 3','ACTIVO',1700,1,15)
+  (3, 3, 'Carlos','Lopez','carlos.lopez@mail.com','111111113','Dir 3','ACTIVO',1700,1,15),
+  (4, 4, 'Sofia','Martinez','sofia.martinez@mail.com','111111114','Dir 4','ACTIVO',1650,1,18),
+  (5, 5, 'Diego','Ruiz','diego.ruiz@mail.com','111111115','Dir 5','ACTIVO',1550,2,9),
+  (6, 6, 'Laura','Benitez','laura.benitez@mail.com','111111116','Dir 6','ACTIVO',1600,1,11),
+  (7, 7, 'Marcelo','Ibarra','marcelo.ibarra@mail.com','111111117','Dir 7','ACTIVO',1400,2,7)
 ON CONFLICT (internal_id) DO NOTHING;
 
 -- =========================
@@ -52,24 +60,37 @@ ON CONFLICT (internal_id) DO NOTHING;
 INSERT INTO prestador_calificacion (prestador_id, puntuacion) VALUES
   (1,5),(1,4),(1,5),
   (2,5),(2,4),(2,5),
-  (3,3),(3,4),(3,3);
+  (3,3),(3,4),(3,3),
+  (4,5),(4,5),(4,4),
+  (5,4),(5,4),(5,5),
+  (6,5),(6,4),
+  (7,3),(7,4);
 
 -- =========================
 -- Habilidades asignadas (prestador_id -> internal_id)
 -- =========================
 INSERT INTO prestador_habilidad (prestador_id, habilidad_id) VALUES
-  (1,1), (1,2),
-  (2,4),
-  (3,1);
+  (1,1), (1,7), (1,8),
+  (2,4), (2,6),
+  (3,3),
+  (4,3), (4,5),
+  (5,5),
+  (6,4), (6,6),
+  (7,2), (7,8);
 
 -- =========================
 -- Solicitudes (usa external_id y fecha/horario)
 -- =========================
 INSERT INTO solicitud (external_id, usuario_id, rubro_id, habilidad_id, titulo, descripcion, estado,
-  prestador_asignado_id, fue_cotizada, es_critica, fecha, horario, created_at, updated_at) VALUES
-  (1001, 1, 3, NULL, 'Pintar living', 'Pintar living y pasillo', 'CREADA', NULL, false, false, '2025-09-12', '10:00', NOW(), NOW()),
-  (1002, 2, 3, 4, 'Pintura exterior', 'Pintura exterior de balcon', 'CREADA', NULL, false, false, '2025-09-12', '11:00', NOW(), NOW()),
-  (1003, 1, 1, 1, 'Reparación de cañería', 'Perdida en la cocina', 'ASIGNADA', 1, true, false, '2025-09-12', '09:00', NOW(), NOW())
+  prestador_asignado_id, fue_cotizada, es_critica, fecha, horario, created_at, updated_at, preferencia_ventana_str) VALUES
+  -- Solicitud con habilidad principal (pintura) y rubro nulo para probar selección por habilidad
+  (1001, 1, NULL, 4, 'Pintar living', 'Pintar living y pasillo', 'CREADA', NULL, false, false, '2025-09-12', '10:00', NOW(), NOW(), NULL),
+  -- Solicitud con habilidad de emergencias, habrá fallback a rubro para completar top 3
+  (1002, 2, NULL, 5, 'Apagones repetidos', 'Salta la térmica con frecuencia', 'CREADA', NULL, false, true, '2025-09-12', '18:00', NOW(), NOW(), NULL),
+  -- Solicitud legacy con rubro pero sin habilidad
+  (1003, 1, 1, NULL, 'Reparación de cañería', 'Perdida en la cocina', 'ASIGNADA', 1, true, false, '2025-09-12', '09:00', NOW(), NOW(), '09:00-10:00'),
+  -- Solicitud con habilidad 120 (ejemplo del webhook) para validar resolución automática de rubro
+  (120045, 2, NULL, 120, 'Cambio en el baño', 'Pérdida en la canilla del baño.', 'CREADA', NULL, false, false, '2025-09-12', '13:00', NOW(), NOW(), NULL)
 ON CONFLICT (external_id) DO NOTHING;
 
 -- ======================================================================
@@ -92,4 +113,3 @@ SELECT CASE WHEN seq IS NOT NULL THEN setval(seq,(SELECT COALESCE(MAX(internal_i
 
 WITH s AS (SELECT pg_get_serial_sequence('solicitud','internal_id') AS seq)
 SELECT CASE WHEN seq IS NOT NULL THEN setval(seq,(SELECT COALESCE(MAX(internal_id),0)+1 FROM solicitud),false) END FROM s;
-

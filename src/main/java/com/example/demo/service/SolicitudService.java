@@ -9,6 +9,7 @@ import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.SolicitudInvitacion;
 import com.example.demo.entity.enums.EstadoSolicitud;
+import com.example.demo.repository.HabilidadRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudInvitacionRepository;
 import com.example.demo.repository.SolicitudRepository;
@@ -52,6 +53,7 @@ public class SolicitudService {
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
     @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
     @Autowired private MatchingPublisherService matchingPublisherService;
+    @Autowired private HabilidadRepository habilidadRepository;
 
     // Ventana por defecto (minutos) para considerar un turno a partir de "horario"
     @org.springframework.beans.factory.annotation.Value("${solicitudes.invite.slot-minutes:60}")
@@ -67,25 +69,26 @@ public class SolicitudService {
             throw new IllegalStateException("La solicitud no está CANCELADA");
         }
 
-        Long rubroId = Objects.requireNonNull(solicitud.getRubroId(), "rubroId requerido");
+        Long rubroId = resolveRubroId(solicitud);
 
-        // Base: excluí todos los que YA COTIZARON esta solicitud
-        List<Prestador> candidatos = prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(
-            rubroId, solicitud.getId(), PageRequest.of(0, 10) // traigo 10 por si alguno lo filtro luego
+        int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
+
+        List<Prestador> seleccion = seleccionarPrestadores(
+            solicitud,
+            rubroId,
+            maxInicial,
+            true
         );
 
         // Extra: si hubo asignado directo y querés excluirlo aunque no haya cotizado
         Long asignado = obtenerPrestadorAsignadoId(solicitud);
         if (asignado != null) {
-            candidatos = candidatos.stream().filter(p -> !p.getId().equals(asignado)).toList();
+            seleccion = seleccion.stream().filter(p -> !Objects.equals(p.getId(), asignado)).toList();
         }
-        candidatos = candidatos.stream()
-            .filter(p -> estaLibre(p, solicitud))
-            .toList();
 
-        int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
-        List<Prestador> seleccion = candidatos.stream().limit(maxInicial).toList();
         if (seleccion.isEmpty()) {
+            log.warn("Sin candidatos ACTIVO para habilidad {} ni rubro {} (solicitud {}) — se mantiene CANCELADA",
+                solicitud.getHabilidadId(), rubroId, solicitud.getId());
             var out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
@@ -183,23 +186,19 @@ public class SolicitudService {
             return procesarConPrestadorAsignado(solicitud, prestadorAsignadoId);
         }
 
-        Long rubroId = Objects.requireNonNull(
-            solicitud.getRubroId(),
-            "categoriaId (rubro) requerido en solicitud " + solicitud.getId()
-        );
-
-        List<Prestador> candidatos = prestadorRepository.findTopByRubroRanked(
-            rubroId, PageRequest.of(0, 10) // pedí más de 3 para que haya margen al filtrar
-        );
+        Long rubroId = resolveRubroId(solicitud);
 
         int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
-        List<Prestador> seleccion = candidatos.stream()
-            .filter(p -> estaLibre(p, solicitud))
-            .limit(maxInicial)
-            .toList();
+        List<Prestador> seleccion = seleccionarPrestadores(
+            solicitud,
+            rubroId,
+            maxInicial,
+            false
+        );
 
         if (seleccion.isEmpty()) {
-            log.warn("Sin candidatos ACTIVO para rubro {} (solicitud {}) — se mantiene en CREADA", rubroId, solicitud.getId());
+            log.warn("Sin candidatos ACTIVO para habilidad {} ni rubro {} (solicitud {}) — se mantiene en CREADA",
+                solicitud.getHabilidadId(), rubroId, solicitud.getId());
             SolicitudTop3Resultado out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
@@ -224,10 +223,11 @@ public class SolicitudService {
         );
 
         List<InvitacionCotizacionDTO> invitaciones = new ArrayList<>();
+        Long rubroIdParaInvitacion = resolveRubroId(solicitud);
         for (Prestador prestador : seleccion) {
             invitaciones.add(enviarInvitacion(
                 solicitud,
-                rubroId,
+                rubroIdParaInvitacion,
                 prestador,
                 "Invitación a cotizar",
                 "Invitación de cotización enviada",
@@ -262,9 +262,15 @@ public class SolicitudService {
             return out;
         }
 
+        Long rubroId = resolveRubroId(solicitud);
+        if (rubroId == null) {
+            log.warn("No se pudo resolver rubro para solicitud {} (habilidad {}) al asignar prestador {}",
+                solicitud.getId(), solicitud.getHabilidadId(), prestadorId);
+        }
+
         InvitacionCotizacionDTO aviso = buildInvitacionDTO(
             solicitud,
-            Objects.requireNonNull(solicitud.getRubroId()),
+            rubroId,
             p,
             "Asignación directa de la solicitud por favor cotizar"
         );
@@ -316,6 +322,7 @@ public class SolicitudService {
         return InvitacionCotizacionDTO.builder()
             .solicitudId(s.getId())
             .rubroId(rubroId)
+            .habilidadId(s.getHabilidadId())
             .prestadorId(p.getId())
             .prestadorNombre(p.getNombre() + " " + p.getApellido())
             .mensaje(mensajeBase + " " + s.getId())
@@ -373,7 +380,7 @@ public class SolicitudService {
 
     @Transactional
     public boolean invitarPrestadorAdicional(Solicitud solicitud) {
-        Long rubroId = Objects.requireNonNull(solicitud.getRubroId(), "rubroId requerido");
+        Long rubroId = resolveRubroId(solicitud);
         int round = solicitud.getCotizacionRound();
         Set<Long> invitados = new HashSet<>(
             solicitudInvitacionRepository.findPrestadorIdsBySolicitudAndRound(solicitud.getId(), round)
@@ -385,17 +392,18 @@ public class SolicitudService {
             return false;
         }
 
-        List<Prestador> candidatos = prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(
+        List<Prestador> candidatos = seleccionarPrestadores(
+            solicitud,
             rubroId,
-            solicitud.getId(),
-            PageRequest.of(0, CANDIDATE_BATCH_SIZE)
+            CANDIDATE_BATCH_SIZE,
+            true
         );
 
         Long asignado = obtenerPrestadorAsignadoId(solicitud);
         Prestador elegido = candidatos.stream()
-            .filter(p -> asignado == null || !p.getId().equals(asignado))
-            .filter(p -> estaLibre(p, solicitud))
+            .filter(p -> asignado == null || !Objects.equals(p.getId(), asignado))
             .filter(p -> !invitados.contains(p.getId()))
+            .filter(p -> estaLibre(p, solicitud))
             .findFirst()
             .orElse(null);
 
@@ -459,6 +467,74 @@ public class SolicitudService {
         return true;
     }
 
+    private List<Prestador> seleccionarPrestadores(
+        Solicitud solicitud,
+        Long rubroId,
+        int maxInicial,
+        boolean excluirCotizados
+    ) {
+        List<Prestador> seleccion = new ArrayList<>();
+        Set<Long> seleccionados = new HashSet<>();
+        PageRequest page = PageRequest.of(0, CANDIDATE_BATCH_SIZE);
+
+        Long habilidadId = solicitud.getHabilidadId();
+        Long solicitudExternalId = solicitud.getId();
+
+        if (habilidadId != null) {
+            List<Prestador> porHabilidad = excluirCotizados && solicitudExternalId != null
+                ? prestadorRepository.findTopByHabilidadExcluyendoLosQueCotizaron(habilidadId, solicitudExternalId, page)
+                : prestadorRepository.findTopByHabilidadRanked(habilidadId, page);
+            agregarCandidatos(seleccion, seleccionados, porHabilidad, solicitud, maxInicial);
+        }
+
+        if (seleccion.size() < maxInicial) {
+            Long rubroFallback = (rubroId != null) ? rubroId : resolveRubroId(solicitud);
+            if (rubroFallback != null) {
+                List<Prestador> porRubro = excluirCotizados && solicitudExternalId != null
+                    ? prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(rubroFallback, solicitudExternalId, page)
+                    : prestadorRepository.findTopByRubroRanked(rubroFallback, page);
+                agregarCandidatos(seleccion, seleccionados, porRubro, solicitud, maxInicial);
+            }
+        }
+
+        return seleccion;
+    }
+
+    private void agregarCandidatos(
+        List<Prestador> seleccion,
+        Set<Long> seleccionados,
+        List<Prestador> candidatos,
+        Solicitud solicitud,
+        int maxInicial
+    ) {
+        if (candidatos == null || candidatos.isEmpty()) {
+            return;
+        }
+        for (Prestador prestador : candidatos) {
+            if (seleccion.size() >= maxInicial) {
+                break;
+            }
+            if (!estaLibre(prestador, solicitud)) {
+                continue;
+            }
+            Long key = prestadorKey(prestador);
+            if (key == null || !seleccionados.add(key)) {
+                continue;
+            }
+            seleccion.add(prestador);
+        }
+    }
+
+    private Long prestadorKey(Prestador prestador) {
+        if (prestador == null) {
+            return null;
+        }
+        if (prestador.getId() != null) {
+            return prestador.getId();
+        }
+        return prestador.getInternalId();
+    }
+
     /**
      * Procesa un lote de solicitudes y las persiste.
      * Si alguna ya existe (mismo ID), la ignora (idempotencia).
@@ -505,12 +581,15 @@ public class SolicitudService {
         // esCritica: tomar es_urgente si viene, si no es_critica
         boolean esCritica = Boolean.TRUE.equals(e.getEsUrgente()) || Boolean.TRUE.equals(e.getEsCritica());
 
+        Long habilidadId = e.getHabilidadId();
+        Long rubroId = resolveRubroId(e);
+
         Solicitud.SolicitudBuilder b = Solicitud.builder()
             .id(e.getSolicitudId()) // externo
             .usuarioId(e.getUsuarioId()) // externo
             .prestadorAsignadoId(e.getPrestadorId()) // externo (puede ser null)
-            .rubroId(e.getRubro()) // opcional
-            .habilidadId(e.getHabilidadId()) // opcional
+            .rubroId(rubroId) // opcional
+            .habilidadId(habilidadId) // opcional
             .titulo(e.getTitulo())
             .descripcion(e.getDescripcion())
             .estado(estado)
@@ -552,6 +631,69 @@ public class SolicitudService {
             );
         } catch (Exception ignored) {}
         return new CreacionResultado(creada, true);
+    }
+
+    private Long resolveRubroId(Solicitud solicitud) {
+        if (solicitud == null) {
+            return null;
+        }
+        if (solicitud.getRubroId() != null) {
+            return solicitud.getRubroId();
+        }
+        Long habilidadId = solicitud.getHabilidadId();
+        if (habilidadId == null) {
+            return null;
+        }
+        return habilidadRepository.findByExternalId(habilidadId)
+            .map(habilidad -> {
+                var rubro = habilidad.getRubro();
+                if (rubro == null) {
+                    log.warn("La habilidad externa {} no tiene rubro asociado (solicitud {}).",
+                        habilidadId, solicitud.getId());
+                    return null;
+                }
+                Long rubroExternalId = rubro.getExternalId();
+                if (rubroExternalId == null) {
+                    log.warn("El rubro interno {} asociado a la habilidad externa {} no tiene externalId (solicitud {}).",
+                        rubro.getId(), habilidadId, solicitud.getId());
+                    return null;
+                }
+                solicitud.setRubroId(rubroExternalId);
+                return rubroExternalId;
+            })
+            .orElseGet(() -> {
+                log.warn("No se encontró la habilidad externa {} en la base local (solicitud {}).",
+                    habilidadId, solicitud.getId());
+                return null;
+            });
+    }
+
+    private Long resolveRubroId(SolicitudesCreadasDTO dto) {
+        if (dto.getRubro() != null) {
+            return dto.getRubro();
+        }
+        Long habilidadId = dto.getHabilidadId();
+        if (habilidadId == null) {
+            return null;
+        }
+        return habilidadRepository.findByExternalId(habilidadId)
+            .map(habilidad -> {
+                var rubro = habilidad.getRubro();
+                if (rubro == null) {
+                    log.warn("La habilidad externa {} no tiene un rubro asociado (solicitud {}).", habilidadId, dto.getSolicitudId());
+                    return null;
+                }
+                Long rubroExternalId = rubro.getExternalId();
+                if (rubroExternalId == null) {
+                    log.warn("El rubro interno {} asociado a la habilidad externa {} no tiene externalId (solicitud {}).",
+                        rubro.getId(), habilidadId, dto.getSolicitudId());
+                }
+                return rubroExternalId;
+            })
+            .orElseGet(() -> {
+                log.warn("No se encontró la habilidad externa {} en la base local (solicitud {}).", habilidadId, dto.getSolicitudId());
+                return null;
+            });
     }
 
     private Ventana parseVentana(String ventana) {
@@ -649,9 +791,3 @@ public class SolicitudService {
                 .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + id));
     }
 }
-
-
-
-
-
-

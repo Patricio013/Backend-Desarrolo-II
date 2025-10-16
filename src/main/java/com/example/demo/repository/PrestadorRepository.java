@@ -73,4 +73,50 @@ public interface PrestadorRepository extends JpaRepository<Prestador, Long> {
         org.springframework.data.domain.Pageable pageable
     );
 
+    @Query(value = """
+        SELECT p.*
+        FROM prestador p
+        JOIN prestador_habilidad ph ON ph.prestador_id = p.internal_id
+        JOIN habilidad h ON h.id = ph.habilidad_id
+        LEFT JOIN prestador_calificacion pc ON pc.prestador_id = p.internal_id
+        WHERE h.external_id = :habilidadExternalId
+          AND UPPER(p.estado) = 'ACTIVO'
+        GROUP BY p.internal_id
+        ORDER BY
+          (COALESCE(AVG(pc.puntuacion),0)/5.0 + 0.2*LN(1+COALESCE(p.trabajos_finalizados,0))) DESC,
+          COALESCE(p.trabajos_finalizados,0) DESC,
+          COALESCE(p.precio_hora,1e12) ASC,
+          p.apellido ASC, p.nombre ASC
+        """, nativeQuery = true)
+    List<Prestador> findTopByHabilidadRanked(
+        @Param("habilidadExternalId") Long habilidadExternalId,
+        Pageable pageable
+    );
+
+    @Query(value = """
+        SELECT p.*
+        FROM prestador p
+        JOIN prestador_habilidad ph ON ph.prestador_id = p.internal_id
+        JOIN habilidad h ON h.id = ph.habilidad_id
+        LEFT JOIN prestador_calificacion pc ON pc.prestador_id = p.internal_id
+        WHERE h.external_id = :habilidadExternalId
+          AND UPPER(p.estado) = 'ACTIVO'
+          AND p.internal_id NOT IN (
+            SELECT c.prestador_id FROM cotizacion c
+            JOIN solicitud s ON s.internal_id = c.solicitud_id
+            WHERE s.external_id = :solicitudExternalId
+          )
+        GROUP BY p.internal_id
+        ORDER BY
+          (COALESCE(AVG(pc.puntuacion),0)/5.0 + 0.2*LN(1+COALESCE(p.trabajos_finalizados,0))) DESC,
+          COALESCE(p.trabajos_finalizados,0) DESC,
+          COALESCE(p.precio_hora,1e12) ASC,
+          p.apellido ASC, p.nombre ASC
+        """, nativeQuery = true)
+    List<Prestador> findTopByHabilidadExcluyendoLosQueCotizaron(
+        @Param("habilidadExternalId") Long habilidadExternalId,
+        @Param("solicitudExternalId") Long solicitudExternalId,
+        Pageable pageable
+    );
+
 }

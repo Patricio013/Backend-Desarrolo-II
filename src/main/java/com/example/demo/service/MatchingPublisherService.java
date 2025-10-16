@@ -135,6 +135,7 @@ public class MatchingPublisherService {
         out.put("mensaje", invitacion.getMensaje());
         out.put("enviado", invitacion.isEnviado());
         out.put("timestamp", invitacion.getTimestamp());
+        out.put("habilidadId", invitacion.getHabilidadId());
         out.put("rubroId", invitacion.getRubroId());
         out.put("cotizacionId", invitacion.getCotizacionId());
         out.put("solicitudId", invitacion.getSolicitudId());

@@ -18,7 +18,15 @@ public interface CotizacionRepository extends JpaRepository<Cotizacion, Long> {
 
   Optional<Cotizacion> findByPrestador_IdAndSolicitud_IdAndRound(Long prestadorId, Long solicitudId, int round);
 
+  Optional<Cotizacion> findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(
+      Long prestadorInternalId,
+      Long solicitudInternalId,
+      int round
+  );
+
   List<Cotizacion> findBySolicitud_Id(Long solicitudId);
 
   List<Cotizacion> findBySolicitud_IdAndRound(Long solicitudId, int round);
+
+  List<Cotizacion> findBySolicitud_InternalIdAndRound(Long solicitudInternalId, int round);
 }
