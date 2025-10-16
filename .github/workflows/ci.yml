@@ -411,16 +411,46 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "🧹 Limpiando colores ANSI del log de Cypress..."
-          
-          # Crear carpeta destino y limpiar colores ANSI
-          mkdir -p metrics/logs
-          sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log > metrics/logs/cypress-clean.log
-          
-          echo "✅ Log limpio guardado en metrics/logs/cypress-clean.log"
+          echo "📊 Parseando resumen final de Cypress desde log..."
+
+          mkdir -p metrics
+
+          # Limpiar colores ANSI
+          clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
+
+          # Extraer las filas del resumen de specs
+          summary_rows=$(echo "$clean_log" | grep -E 'cy\.js' | sed 's/│//g' | awk '{
+            spec=$2;
+            gsub(/[^0-9]/,"",$3); duration=$3;
+            tests=$4; passing=($5=="-"?0:$5); failing=($6=="-"?0:$6);
+            pending=($7=="-"?0:$7); skipped=($8=="-"?0:$8);
+            printf("{\"spec\":\"%s\",\"duration\":%s,\"tests\":%s,\"passing\":%s,\"failing\":%s,\"pending\":%s,\"skipped\":%s},",spec,duration,tests,passing,failing,pending,skipped);
+          }')
+
+          # Eliminar la coma final
+          summary_json="[${summary_rows%,}]"
+
+          # Extraer totales (última línea del resumen)
+          totals=$(echo "$clean_log" | grep -E 'failed \(100%|\([0-9]+%\)' | tail -1 | awk '{print $6" "$9" "$12" "$15" "$18}')
+          total_tests=$(echo "$totals" | awk '{print ($1=="-"?0:$1)}')
+          total_passing=$(echo "$totals" | awk '{print ($2=="-"?0:$2)}')
+          total_failing=$(echo "$totals" | awk '{print ($3=="-"?0:$3)}')
+          total_pending=$(echo "$totals" | awk '{print ($4=="-"?0:$4)}')
+          total_skipped=$(echo "$totals" | awk '{print ($5=="-"?0:$5)}')
+
+          jq -n \
+            --argjson total "$total_tests" \
+            --argjson passed "$total_passing" \
+            --argjson failed "$total_failing" \
+            --argjson skipped "$total_skipped" \
+            --argjson summary "$summary_json" \
+            '{ total: $total, passed: $passed, failed: $failed, skipped: $skipped, summary: $summary }' > metrics/cypress.json
+
+          echo "✅ metrics/cypress.json generado:"
+          cat metrics/cypress.json
           else
-            echo "⚠️ No se encontró artifacts/cypress-results/cypress.log"
-            echo "Sin log disponible" > metrics/logs/cypress-clean.log
+            echo "⚠️ No se encontró cypress.log, generando JSON vacío"
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "summary": [] }' > metrics/cypress.json
           fi
 
           # --- 🕒 Metadata ---
