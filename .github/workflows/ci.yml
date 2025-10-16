@@ -373,26 +373,31 @@ jobs:
           mkdir -p metrics
 
           # --- 🧪 JUnit ---
-          junit_reports_path="artifacts/junit-results"
-          if [ -d "$junit_reports_path" ] && [ -n "$(find $junit_reports_path -type f)" ]; then
-            totals=$(awk -F'"' '
-              /<testsuite / {
-                for (i=1;i<=NF;i++) {
-                  if ($i ~ /tests=/)    T += $(i+1)
-                  if ($i ~ /failures=/) F += $(i+1)
-                  if ($i ~ /errors=/)   E += $(i+1)
-                  if ($i ~ /skipped=/)  S += $(i+1)
-                }
-              }
-              END { printf "%d %d %d %d\n", T, F, E, S }
-            ' $(find $junit_reports_path -type f))
-            T=$(echo "$totals" | awk '{print $1}')
-            F=$(echo "$totals" | awk '{print $2}')
-            E=$(echo "$totals" | awk '{print $3}')
-            S=$(echo "$totals" | awk '{print $4}')
-            echo "{ \"total\": $T, \"failures\": $F, \"errors\": $E, \"skipped\": $S }" > metrics/junit.json
+          if [ -f "artifacts/cypress-results/cypress.log" ]; then
+          echo "📦 Extrayendo último bloque JSON desde cypress.log"
+
+          # Elimina códigos de color ANSI para no romper el JSON
+          clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
+
+          # Extrae el último bloque JSON completo del log (todo entre llaves {})
+          last_json=$(echo "$clean_log" | tac | awk '
+            BEGIN { json="" }
+            /\}/ { injson=1 }
+            injson { json=$0 "\n" json }
+            /\{/ && injson { print json; exit }
+          ')
+
+          if [ -n "$last_json" ]; then
+            echo "$last_json" | jq '.' > metrics/cypress.json 2>/dev/null || echo "$last_json" > metrics/cypress.json
+            echo "✅ Último bloque JSON extraído:"
+            cat metrics/cypress.json
           else
-            echo "{ \"total\": 0, \"failures\": 0, \"errors\": 0, \"skipped\": 0 }" > metrics/junit.json
+            echo "⚠️ No se encontró JSON válido en el log. Guardando vacío."
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
+          fi
+          else
+            echo "⚠️ No se encontró cypress.log, generando métricas vacías."
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
 
 
