@@ -406,39 +406,39 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Buscando último bloque JSON en artifacts/cypress-results/cypress.log ..."
-          mkdir -p metrics
+          echo "📊 Extrayendo métricas desde cypress.log"
 
-          # Extraer el último bloque JSON bien formado (desde la última { hasta su cierre correspondiente })
-          awk '
-            /^{/ { in_json=1; json=""; depth=0 }
-            in_json {
-              json = json $0 ORS
-              depth += gsub(/{/, "{")
-              depth -= gsub(/}/, "}")
-              if (depth == 0 && in_json) {
-                last_json = json
-                in_json = 0
-              }
-            }
-            END {
-              if (last_json != "") print last_json
-            }
-          ' artifacts/cypress-results/cypress.log > metrics/cypress.json.raw
+          clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
 
-          # Si el archivo tiene algo más que una llave
-          if [ -s metrics/cypress.json.raw ] && [ "$(cat metrics/cypress.json.raw | tr -d '[:space:]')" != "}" ]; then
-            echo "✅ Bloque JSON detectado, formateando..."
-            cat metrics/cypress.json.raw | jq . > metrics/cypress.json || cp metrics/cypress.json.raw metrics/cypress.json
+          # Extraer totales de la última línea del log
+          total=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $9}' || echo 0)
+          failed=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $6}' || echo 0)
+          passed=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $3}' || echo 0)
+          skipped=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $11}' || echo 0)
+          duration=$(echo "$clean_log" | grep -E "failed" | tail -1 | awk '{print $8}' || echo 0)
+
+          # Armar resumen por spec
+          summary=$(echo "$clean_log" | grep -E "cy\.js" | awk '{
+            gsub(/\x1b\[[0-9;]*m/,"");
+            printf "{\"spec\":\"%s\",\"tests\":%s,\"failed\":%s},", $2, $8, $10
+          }' | sed 's/,$//')
+
+          jq -n \
+            --argjson total "${total:-0}" \
+            --argjson passed "${passed:-0}" \
+            --argjson failed "${failed:-0}" \
+            --argjson skipped "${skipped:-0}" \
+            --argjson duration "${duration:-0}" \
+            --argjson summary "[$summary]" \
+            '{total: $total, passed: $passed, failed: $failed, skipped: $skipped, duration: $duration, summary: $summary}' \
+            > metrics/cypress.json
+
+          echo "✅ Métricas extraídas desde el log:"
+          cat metrics/cypress.json
           else
-            echo "⚠️ No se detectó JSON válido en el log, generando JSON vacío."
+            echo "⚠️ No se encontró cypress.log, generando métricas vacías."
             echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
           fi
-          else
-            echo "⚠️ No se encontró cypress.log, generando JSON vacío."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
-          fi
-
 
 
           # --- 🕒 Metadata ---
