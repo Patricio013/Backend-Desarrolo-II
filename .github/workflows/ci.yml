@@ -405,14 +405,19 @@ jobs:
 
 
           # --- 🧫 Cypress ---
-          CYPRESS_JSON=$(find artifacts/cypress-results -type f -name "*.json" | sort | tail -n 1)
-          if [ -n "$CYPRESS_JSON" ]; then
-            echo "📦 Copiando último resultado Cypress desde $CYPRESS_JSON"
-            cp "$CYPRESS_JSON" metrics/cypress.json
+          if [ -f "artifacts/cypress-results/cypress.log" ]; then
+          echo "📊 Extrayendo último bloque JSON del log de Cypress..."
+          last_json=$(awk '/^\{/{json=$0; next} /^\}/{print json "\n" $0; json=""; next} {if(json)json=json"\n"$0}' artifacts/cypress-results/cypress.log | tail -n +1 | tail -n 1)
+          
+          if [ -n "$last_json" ]; then
+            echo "$last_json" > metrics/cypress.json
           else
-            echo "⚠️ No se encontró ningún results.json, generando vacío."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
           fi
+        else
+          echo "⚠️ No se encontró cypress.log, generando JSON vacío."
+          echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0, "summary": [] }' > metrics/cypress.json
+        fi
 
 
 
