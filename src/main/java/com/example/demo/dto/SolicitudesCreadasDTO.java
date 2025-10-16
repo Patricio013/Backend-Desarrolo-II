@@ -18,8 +18,16 @@ public class SolicitudesCreadasDTO {
     @JsonAlias({"rubro", "rubroId"})
     private Long rubro;
 
+    // Nuevo: ID de habilidad (externo)
+    @JsonProperty("habilidad_id")
+    private Long habilidadId;
+
     @JsonProperty("descripcion")
     private String descripcion;
+
+    // Nuevo: título
+    @JsonProperty("titulo")
+    private String titulo;
 
     @JsonProperty("prestador_id")
     private Long prestadorId; // null => abierta
@@ -29,6 +37,19 @@ public class SolicitudesCreadasDTO {
 
     @JsonProperty("es_critica")
     private Boolean esCritica;
+    // Nuevo alias: es_urgente -> esCritica
+    @JsonProperty("es_urgente")
+    private Boolean esUrgente;
+
+    // Nuevo: fecha y horario
+    @JsonProperty("fecha")
+    private String fecha;   // yyyy-MM-dd
+    @JsonProperty("horario")
+    private String horario; // HH:mm
+
+    // Opcional: estado como string
+    @JsonProperty("estado")
+    private String estado;
 
     @JsonProperty("preferencia_horaria")
     private PreferenciaHorariaDTO preferenciaHoraria;

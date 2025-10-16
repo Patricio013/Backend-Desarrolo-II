@@ -25,8 +25,8 @@ public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
     @Query("""
         SELECT s FROM Solicitud s
         WHERE s.prestadorAsignadoId = :prestadorId
-        AND s.preferenciaDia = :dia
-        AND (s.preferenciaDesde <= :hasta AND s.preferenciaHasta >= :desde)
+        AND s.fecha = :dia
+        AND (s.horario BETWEEN :desde AND :hasta)
         AND (s.estado = 'ASIGNADA' OR s.estado = 'EN_PROGRESO')
     """)
     List<Solicitud> findAsignadasEnDiaYFranja(Long prestadorId, LocalDate dia,

@@ -53,6 +53,10 @@ public class SolicitudService {
     @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
     @Autowired private MatchingPublisherService matchingPublisherService;
 
+    // Ventana por defecto (minutos) para considerar un turno a partir de "horario"
+    @org.springframework.beans.factory.annotation.Value("${solicitudes.invite.slot-minutes:60}")
+    private int defaultInviteSlotMinutes;
+
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
         Solicitud solicitud = solicitudRepository.findByExternalId(solicitudId)
@@ -452,20 +456,7 @@ public class SolicitudService {
     }
 
     private boolean estaLibre(Prestador prestador, Solicitud solicitud) {
-        if (solicitud.getPreferenciaDia() == null ||
-            solicitud.getPreferenciaDesde() == null ||
-            solicitud.getPreferenciaHasta() == null) {
-            return true; // si no hay preferencia, no filtramos
-        }
-    
-        List<Solicitud> asignadas = solicitudRepository.findAsignadasEnDiaYFranja(
-            prestador.getId(),
-            solicitud.getPreferenciaDia(),
-            solicitud.getPreferenciaDesde(),
-            solicitud.getPreferenciaHasta()
-        );
-    
-        return asignadas.isEmpty(); // libre si no hay choque
+        return true;
     }
 
     /**
@@ -498,32 +489,54 @@ public class SolicitudService {
     }
 
     private CreacionResultado mapearYGuardar(SolicitudesCreadasDTO e) {
-        if (solicitudRepository.existsById(e.getSolicitudId())) {
-            Solicitud existente = solicitudRepository.findByExternalId(e.getSolicitudId()).orElse(null);
-            return existente != null ? new CreacionResultado(existente, false) : null;
+        // Buscar por ID externo, no por PK interno
+        var existenteOpt = solicitudRepository.findByExternalId(e.getSolicitudId());
+        if (existenteOpt.isPresent()) {
+            return new CreacionResultado(existenteOpt.get(), false);
         }
 
-        Solicitud.SolicitudBuilder b = Solicitud.builder()
-            .id(e.getSolicitudId())
-            .usuarioId(e.getUsuarioId())
-            .rubroId(e.getRubro())
-            .descripcion(e.getDescripcion())
-            .estado(EstadoSolicitud.CREADA)
-            .prestadorAsignadoId(e.getPrestadorId())
-            .fueCotizada(Boolean.TRUE.equals(e.getFueCotizada()))
-            .esCritica(Boolean.TRUE.equals(e.getEsCritica()));
+        // Estado (si viene), por defecto CREADA
+        EstadoSolicitud estado = EstadoSolicitud.CREADA;
+        if (e.getEstado() != null && !e.getEstado().isBlank()) {
+            try { estado = EstadoSolicitud.valueOf(e.getEstado().trim().toUpperCase()); }
+            catch (Exception ignore) { /* fallback a CREADA */ }
+        }
 
-        // Preferencia horaria
+        // esCritica: tomar es_urgente si viene, si no es_critica
+        boolean esCritica = Boolean.TRUE.equals(e.getEsUrgente()) || Boolean.TRUE.equals(e.getEsCritica());
+
+        Solicitud.SolicitudBuilder b = Solicitud.builder()
+            .id(e.getSolicitudId()) // externo
+            .usuarioId(e.getUsuarioId()) // externo
+            .prestadorAsignadoId(e.getPrestadorId()) // externo (puede ser null)
+            .rubroId(e.getRubro()) // opcional
+            .habilidadId(e.getHabilidadId()) // opcional
+            .titulo(e.getTitulo())
+            .descripcion(e.getDescripcion())
+            .estado(estado)
+            .fueCotizada(Boolean.TRUE.equals(e.getFueCotizada()))
+            .esCritica(esCritica);
+
+        // fecha + horario
+        if (e.getFecha() != null && !e.getFecha().isBlank()) {
+            b.fecha(LocalDate.parse(e.getFecha().trim()));
+        }
+        if (e.getHorario() != null && !e.getHorario().isBlank()) {
+            b.horario(LocalTime.parse(e.getHorario().trim()));
+        }
+
+        // Compat: si viene preferencia_horaria (old formato), mapear al nuevo
         var ph = e.getPreferenciaHoraria();
         if (ph != null) {
-            if (ph.getDia() != null && !ph.getDia().isBlank()) {
-                b.preferenciaDia(LocalDate.parse(ph.getDia()));
+            if ((e.getFecha() == null || e.getFecha().isBlank()) && ph.getDia() != null && !ph.getDia().isBlank()) {
+                b.fecha(LocalDate.parse(ph.getDia().trim()));
             }
-            if (ph.getVentana() != null && !ph.getVentana().isBlank()) {
-                b.preferenciaVentanaStr(ph.getVentana());
+            if ((e.getHorario() == null || e.getHorario().isBlank()) && ph.getVentana() != null && !ph.getVentana().isBlank()) {
                 var v = parseVentana(ph.getVentana());
-                b.preferenciaDesde(v.desde);
-                b.preferenciaHasta(v.hasta);
+                b.horario(v.desde); // tomar el desde como horario
+                
+                
+                b.preferenciaVentanaStr(ph.getVentana());
             }
         }
 
@@ -583,9 +596,8 @@ public class SolicitudService {
                 putIfNotNull(details, "usuarioId", s.getUsuarioId());
                 putIfNotNull(details, "rubroId", s.getRubroId());
                 putIfNotNull(details, "descripcion", s.getDescripcion());
-                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
-                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
-                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "fecha", s.getFecha());
+                putIfNotNull(details, "horario", s.getHorario());
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case COTIZANDO -> {
@@ -593,9 +605,8 @@ public class SolicitudService {
                 title = "Solicitud en cotización";
                 description = "La solicitud está COTIZANDO";
                 putIfNotNull(details, "rubroId", s.getRubroId());
-                putIfNotNull(details, "preferenciaDia", s.getPreferenciaDia());
-                putIfNotNull(details, "preferenciaDesde", s.getPreferenciaDesde());
-                putIfNotNull(details, "preferenciaHasta", s.getPreferenciaHasta());
+                putIfNotNull(details, "fecha", s.getFecha());
+                putIfNotNull(details, "horario", s.getHorario());
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case ASIGNADA -> {
@@ -638,4 +649,9 @@ public class SolicitudService {
                 .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + id));
     }
 }
+
+
+
+
+
 
