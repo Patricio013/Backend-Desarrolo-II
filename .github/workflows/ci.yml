@@ -411,33 +411,26 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📦 Extrayendo último bloque JSON desde cypress.log"
+          echo "📦 Guardando parte final del log (desde 'Run Finished')"
 
           # Quitar códigos de color ANSI
           clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
 
-          # Guardar log limpio en gh-pages
-          echo "$clean_log" > metrics/cypress-clean.log
+          # Extraer desde la última aparición de "(Run Finished)" hasta el final
+          trimmed_log=$(awk '/\(Run Finished\)/{found=1} found' <<< "$clean_log")
 
-          # Extraer el último bloque JSON completo
-          last_json=$(echo "$clean_log" | tac | awk '
-            BEGIN { json=""; count=0 }
-            /\}/ { injson=1; count++ }
-            injson { json=$0 "\n" json }
-            /\{/ && injson && count>1 { print json; exit }
-          ')
+          # Si se encontró el bloque, lo guardamos, sino guardamos el log entero
+          if [ -n "$trimmed_log" ]; then
+            echo "$trimmed_log" > metrics/cypress-clean.log
+          else
+            echo "$clean_log" > metrics/cypress-clean.log
+          fi
 
-          if [ -n "$last_json" ]; then
-            echo "$last_json" | jq '.' > metrics/cypress.json 2>/dev/null || echo "$last_json" > metrics/cypress.json
-            echo "✅ Último bloque JSON guardado en metrics/cypress.json"
+          echo "✅ Guardado en metrics/cypress-clean.log"
           else
-            echo "⚠️ No se encontró bloque JSON en el log. Generando vacío."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
+            echo "⚠️ No se encontró cypress.log"
           fi
-          else
-            echo "⚠️ No se encontró cypress.log, generando métricas vacías."
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
-          fi
+
 
           # --- 🕒 Metadata ---
           echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > metrics/meta.json
@@ -456,3 +449,59 @@ jobs:
           git commit -m "📊 Update metrics $(date -u +%FT%TZ)"
 
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+        - name: 📸 Generar imagen del resumen Cypress
+    if: always()
+    run: |
+      echo "🖼️ Generando imagen del resumen Cypress..."
+      mkdir -p metrics
+
+      # 1️⃣ Generar un resumen en Markdown legible
+      echo "## 🧪 Cypress Summary" > metrics/cypress_summary.md
+      if [ -f "metrics/cypress.json" ]; then
+        total=$(jq '.total' metrics/cypress.json)
+        passed=$(jq '.passed' metrics/cypress.json)
+        failed=$(jq '.failed' metrics/cypress.json)
+        skipped=$(jq '.skipped' metrics/cypress.json)
+        echo "" >> metrics/cypress_summary.md
+        echo "| Total | Passed | Failed | Skipped |" >> metrics/cypress_summary.md
+        echo "|------:|-------:|-------:|--------:|" >> metrics/cypress_summary.md
+        echo "| $total | $passed | $failed | $skipped |" >> metrics/cypress_summary.md
+
+        echo "" >> metrics/cypress_summary.md
+        echo "### 🧾 Detalle por Spec" >> metrics/cypress_summary.md
+        jq -r '.summary[] | "| \(.spec) | \(.tests) | \(.failing) | \(.skipped) |"' metrics/cypress.json 2>/dev/null \
+          || echo "_No hay resumen detallado disponible_" >> metrics/cypress_summary.md
+      else
+        echo "_⚠️ No se encontró metrics/cypress.json._" >> metrics/cypress_summary.md
+      fi
+
+      # 2️⃣ Instalar dependencias para convertir Markdown a PNG
+      sudo apt-get update -y >/dev/null
+      sudo apt-get install -y poppler-utils >/dev/null
+      npm install -g md-to-pdf
+
+      # 3️⃣ Convertir Markdown a PDF y luego a PNG
+      md-to-pdf metrics/cypress_summary.md --dest metrics/cypress_summary.pdf
+      pdftoppm metrics/cypress_summary.pdf metrics/cypress_summary -png
+
+      echo "✅ Imagen generada en metrics/cypress_summary-1.png"
+
+      - name: 📤 Subir imagen Cypress Summary a gh-pages
+      if: always()
+      run: |
+        echo "🚀 Subiendo imagen del resumen Cypress a gh-pages..."
+        git config --global user.name "github-actions"
+        git config --global user.email "actions@github.com"
+
+        mkdir -p .ghpages-temp
+        cp metrics/cypress_summary-1.png .ghpages-temp/
+        cp metrics/meta.json .ghpages-temp/
+
+        cd .ghpages-temp
+        git init
+        git checkout -b gh-pages
+
+        git add .
+        git commit -m "🧪 Cypress summary image $(date -u +%FT%TZ)"
+        git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+
