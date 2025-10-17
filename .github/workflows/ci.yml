@@ -411,46 +411,32 @@ jobs:
 
           # --- 🧫 Cypress ---
           if [ -f "artifacts/cypress-results/cypress.log" ]; then
-          echo "📊 Parseando resumen final de Cypress desde log..."
+          echo "📦 Extrayendo último bloque JSON desde cypress.log"
 
-          mkdir -p metrics
-
-          # Limpiar colores ANSI
+          # Quitar códigos de color ANSI
           clean_log=$(sed 's/\x1b\[[0-9;]*m//g' artifacts/cypress-results/cypress.log)
 
-          # Extraer las filas del resumen de specs
-          summary_rows=$(echo "$clean_log" | grep -E 'cy\.js' | sed 's/│//g' | awk '{
-            spec=$2;
-            gsub(/[^0-9]/,"",$3); duration=$3;
-            tests=$4; passing=($5=="-"?0:$5); failing=($6=="-"?0:$6);
-            pending=($7=="-"?0:$7); skipped=($8=="-"?0:$8);
-            printf("{\"spec\":\"%s\",\"duration\":%s,\"tests\":%s,\"passing\":%s,\"failing\":%s,\"pending\":%s,\"skipped\":%s},",spec,duration,tests,passing,failing,pending,skipped);
-          }')
+          # Guardar log limpio en gh-pages
+          echo "$clean_log" > metrics/cypress-clean.log
 
-          # Eliminar la coma final
-          summary_json="[${summary_rows%,}]"
+          # Extraer el último bloque JSON completo
+          last_json=$(echo "$clean_log" | tac | awk '
+            BEGIN { json=""; count=0 }
+            /\}/ { injson=1; count++ }
+            injson { json=$0 "\n" json }
+            /\{/ && injson && count>1 { print json; exit }
+          ')
 
-          # Extraer totales (última línea del resumen)
-          totals=$(echo "$clean_log" | grep -E 'failed \(100%|\([0-9]+%\)' | tail -1 | awk '{print $6" "$9" "$12" "$15" "$18}')
-          total_tests=$(echo "$totals" | awk '{print ($1=="-"?0:$1)}')
-          total_passing=$(echo "$totals" | awk '{print ($2=="-"?0:$2)}')
-          total_failing=$(echo "$totals" | awk '{print ($3=="-"?0:$3)}')
-          total_pending=$(echo "$totals" | awk '{print ($4=="-"?0:$4)}')
-          total_skipped=$(echo "$totals" | awk '{print ($5=="-"?0:$5)}')
-
-          jq -n \
-            --argjson total "$total_tests" \
-            --argjson passed "$total_passing" \
-            --argjson failed "$total_failing" \
-            --argjson skipped "$total_skipped" \
-            --argjson summary "$summary_json" \
-            '{ total: $total, passed: $passed, failed: $failed, skipped: $skipped, summary: $summary }' > metrics/cypress.json
-
-          echo "✅ metrics/cypress.json generado:"
-          cat metrics/cypress.json
+          if [ -n "$last_json" ]; then
+            echo "$last_json" | jq '.' > metrics/cypress.json 2>/dev/null || echo "$last_json" > metrics/cypress.json
+            echo "✅ Último bloque JSON guardado en metrics/cypress.json"
           else
-            echo "⚠️ No se encontró cypress.log, generando JSON vacío"
-            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "summary": [] }' > metrics/cypress.json
+            echo "⚠️ No se encontró bloque JSON en el log. Generando vacío."
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
+          fi
+          else
+            echo "⚠️ No se encontró cypress.log, generando métricas vacías."
+            echo '{ "total": 0, "passed": 0, "failed": 0, "skipped": 0, "duration": 0 }' > metrics/cypress.json
           fi
 
           # --- 🕒 Metadata ---
