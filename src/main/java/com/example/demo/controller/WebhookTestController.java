@@ -1,5 +1,7 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.CotizacionWebhookDTO;
+import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.PrestadorAltaWebhookDTO;
 import com.example.demo.dto.PrestadorDTO;
@@ -124,6 +126,9 @@ public class WebhookTestController {
             boolean cotizacionAceptada = false;
             Map<String, Object> cotizacionAceptadaDetails = null;
             List<String> cotizacionAceptadaWarnings = new ArrayList<>();
+            boolean cotizacionRecibida = false;
+            Map<String, Object> cotizacionRecibidaDetails = null;
+            List<String> cotizacionRecibidaWarnings = new ArrayList<>();
             boolean prestadorProcesado = false;
             Long prestadorIdProcesado = null;
             List<String> prestadorWarnings = new ArrayList<>();
@@ -270,6 +275,45 @@ public class WebhookTestController {
                 } catch (Exception e) {
                     prestadorModWarnings.add("Error procesando modificacion de prestador: " + e.getMessage());
                     log.error("Error procesando modificacion de prestador desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.pedidos.cotizacion_enviada")
+                    && "cotizacion_enviada".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                try {
+                    CotizacionWebhookDTO cotizacionDto = objectMapper.convertValue(payloadSection, CotizacionWebhookDTO.class);
+                    if (cotizacionDto.getIdPedido() == null) {
+                        cotizacionRecibidaWarnings.add("id_pedido ausente en cotización");
+                        log.warn("Cotizacion enviada sin id_pedido: {}", payloadSection);
+                    } else if (cotizacionDto.getIdPrestador() == null) {
+                        cotizacionRecibidaWarnings.add("id_prestador ausente en cotización");
+                        log.warn("Cotizacion enviada sin id_prestador: {}", payloadSection);
+                    } else if (cotizacionDto.getTarifa() == null) {
+                        cotizacionRecibidaWarnings.add("tarifa ausente en cotización");
+                        log.warn("Cotizacion enviada sin tarifa: {}", payloadSection);
+                    } else {
+                        var submit = CotizacionesSubmit.builder()
+                            .solicitudId(cotizacionDto.getIdPedido())
+                            .prestadorId(cotizacionDto.getIdPrestador())
+                            .monto(BigDecimal.valueOf(cotizacionDto.getTarifa()))
+                            .build();
+                        cotizacionService.recibirCotizacion(submit);
+                        cotizacionRecibida = true;
+                        cotizacionRecibidaDetails = Map.of(
+                            "cotizacionIdExterna", cotizacionDto.getId(),
+                            "solicitudId", cotizacionDto.getIdPedido(),
+                            "prestadorId", cotizacionDto.getIdPrestador(),
+                            "monto", cotizacionDto.getTarifa()
+                        );
+                    }
+                } catch (IllegalArgumentException e) {
+                    cotizacionRecibidaWarnings.add(e.getMessage());
+                    log.warn("Payload de cotizacion enviada inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    cotizacionRecibidaWarnings.add("Error inesperado al procesar cotización: " + e.getMessage());
+                    log.error("Error procesando cotizacion enviada desde webhook", e);
                 }
             }
 
@@ -459,6 +503,13 @@ public class WebhookTestController {
             if (!cotizacionAceptadaWarnings.isEmpty()) {
                 storedPayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
             }
+            storedPayload.put("cotizacionRecibida", cotizacionRecibida);
+            if (cotizacionRecibidaDetails != null) {
+                storedPayload.put("cotizacionRecibidaDetails", cotizacionRecibidaDetails);
+            }
+            if (!cotizacionRecibidaWarnings.isEmpty()) {
+                storedPayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
+            }
             storedPayload.put("habilidadProcesada", habilidadProcesada);
             if (habilidadIdProcesada != null) {
                 storedPayload.put("habilidadId", habilidadIdProcesada);
@@ -549,6 +600,13 @@ public class WebhookTestController {
             }
             if (!cotizacionAceptadaWarnings.isEmpty()) {
                 responsePayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
+            }
+            responsePayload.put("cotizacionRecibida", cotizacionRecibida);
+            if (cotizacionRecibidaDetails != null) {
+                responsePayload.put("cotizacionRecibidaDetails", cotizacionRecibidaDetails);
+            }
+            if (!cotizacionRecibidaWarnings.isEmpty()) {
+                responsePayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
             }
             responsePayload.put("habilidadProcesada", habilidadProcesada);
             if (habilidadIdProcesada != null) {
