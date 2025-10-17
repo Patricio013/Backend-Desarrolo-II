@@ -449,3 +449,60 @@ jobs:
           git commit -m "📊 Update metrics $(date -u +%FT%TZ)"
 
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+
+      - name: 📸 Generar imagen del resumen Cypress
+        if: always()
+        run: |
+          echo "🖼️ Generando imagen del resumen Cypress..."
+          mkdir -p metrics
+
+          # 1️⃣ Generar un resumen en Markdown legible
+          echo "## 🧪 Cypress Summary" > metrics/cypress_summary.md
+          if [ -f "metrics/cypress.json" ]; then
+            total=$(jq '.total' metrics/cypress.json)
+            passed=$(jq '.passed' metrics/cypress.json)
+            failed=$(jq '.failed' metrics/cypress.json)
+            skipped=$(jq '.skipped' metrics/cypress.json)
+            echo "" >> metrics/cypress_summary.md
+            echo "| Total | Passed | Failed | Skipped |" >> metrics/cypress_summary.md
+            echo "|------:|-------:|-------:|--------:|" >> metrics/cypress_summary.md
+            echo "| $total | $passed | $failed | $skipped |" >> metrics/cypress_summary.md
+
+            echo "" >> metrics/cypress_summary.md
+            echo "### 🧾 Detalle por Spec" >> metrics/cypress_summary.md
+            jq -r '.summary[] | "| \(.spec) | \(.tests) | \(.failing) | \(.skipped) |"' metrics/cypress.json 2>/dev/null \
+              || echo "_No hay resumen detallado disponible_" >> metrics/cypress_summary.md
+          else
+            echo "_⚠️ No se encontró metrics/cypress.json._" >> metrics/cypress_summary.md
+          fi
+
+          # 2️⃣ Instalar dependencias para convertir Markdown a PNG
+          sudo apt-get update -y >/dev/null
+          sudo apt-get install -y poppler-utils >/dev/null
+          npm install -g md-to-pdf
+
+          # 3️⃣ Convertir Markdown a PDF y luego a PNG
+          md-to-pdf metrics/cypress_summary.md --dest metrics/cypress_summary.pdf
+          pdftoppm metrics/cypress_summary.pdf metrics/cypress_summary -png
+
+          echo "✅ Imagen generada en metrics/cypress_summary-1.png"
+
+      - name: 📤 Subir imagen Cypress Summary a gh-pages
+        if: always()
+        run: |
+          echo "🚀 Subiendo imagen del resumen Cypress a gh-pages..."
+          git config --global user.name "github-actions"
+          git config --global user.email "actions@github.com"
+
+          mkdir -p .ghpages-temp
+          cp metrics/cypress_summary-1.png .ghpages-temp/
+          cp metrics/meta.json .ghpages-temp/
+
+          cd .ghpages-temp
+          git init
+          git checkout -b gh-pages
+
+          git add .
+          git commit -m "🧪 Cypress summary image $(date -u +%FT%TZ)"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+
