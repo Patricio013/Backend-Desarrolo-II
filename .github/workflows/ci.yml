@@ -450,7 +450,7 @@ jobs:
 
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
 
-            - name: 🧾 Generar y publicar resumen Cypress en Markdown
+      - name: 🧾 Generar y publicar resumen Cypress en Markdown
         if: always()
         run: |
           echo "🧪 Generando resumen Cypress en Markdown..."
