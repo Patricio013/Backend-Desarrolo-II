@@ -458,14 +458,12 @@ jobs:
 
           echo "## 🧪 Cypress Summary" > metrics/cypress_summary.md
 
-          # Si el archivo no existe o no es JSON válido, usar valores por defecto
           if jq empty metrics/cypress.json 2>/dev/null; then
             total=$(jq -r '.total // 0' metrics/cypress.json)
             passed=$(jq -r '.passed // 0' metrics/cypress.json)
             failed=$(jq -r '.failed // 0' metrics/cypress.json)
             skipped=$(jq -r '.skipped // 0' metrics/cypress.json)
           else
-            echo "⚠️ Archivo metrics/cypress.json inválido o vacío. Usando valores 0."
             total=0; passed=0; failed=0; skipped=0
           fi
 
@@ -474,27 +472,23 @@ jobs:
           echo "|------:|-------:|-------:|--------:|" >> metrics/cypress_summary.md
           echo "| $total | $passed | $failed | $skipped |" >> metrics/cypress_summary.md
 
-          echo "" >> metrics/cypress_summary.md
-          echo "### 🧾 Detalle por Spec" >> metrics/cypress_summary.md
-
-          # Si el resumen existe, imprimirlo en tabla
-          if jq -e '.summary' metrics/cypress.json >/dev/null 2>&1; then
-            jq -r '.summary[] | "| \(.spec // "-") | \(.tests // 0) | \(.failing // 0) | \(.skipped // 0) |"' metrics/cypress.json 2>/dev/null \
-              >> metrics/cypress_summary.md
-          else
-            echo "_No hay resumen detallado disponible_" >> metrics/cypress_summary.md
-          fi
-
-          # 2️⃣ Instalar dependencias para convertir Markdown a PNG
+          # 📦 Crear PDF y PNG (sin romper el flujo si falla)
           sudo apt-get update -y >/dev/null
           sudo apt-get install -y poppler-utils >/dev/null
           npm install -g md-to-pdf
 
-          # 3️⃣ Convertir Markdown a PDF y luego a PNG
           md-to-pdf metrics/cypress_summary.md --dest metrics/cypress_summary.pdf || echo "⚠️ md-to-pdf falló"
-          pdftoppm metrics/cypress_summary.pdf metrics/cypress_summary -png || echo "⚠️ pdftoppm falló"
+          
+          if [ -f "metrics/cypress_summary.pdf" ]; then
+            pdftoppm metrics/cypress_summary.pdf metrics/cypress_summary -png || echo "⚠️ pdftoppm falló"
+          else
+            echo "⚠️ No se generó el PDF, creando imagen vacía."
+            convert -size 800x200 xc:white -gravity center -pointsize 24 \
+              -annotate 0 "Cypress Summary Not Available" metrics/cypress_summary-1.png
+          fi
 
-          echo "✅ Imagen generada en metrics/cypress_summary-1.png (si todo fue bien)"
+          ls -lh metrics/
+          echo "✅ Imagen final generada (o placeholder) en metrics/cypress_summary-1.png"
 
       - name: 📤 Subir imagen Cypress Summary a gh-pages
         if: always()
