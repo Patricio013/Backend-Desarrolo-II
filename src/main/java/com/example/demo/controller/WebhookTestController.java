@@ -3,11 +3,14 @@ package com.example.demo.controller;
 import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.PrestadorAltaWebhookDTO;
 import com.example.demo.dto.PrestadorDTO;
+import com.example.demo.dto.HabilidadAltaWebhookDTO;
 import com.example.demo.dto.RubroAltaWebhookDTO;
 import com.example.demo.dto.RubroModificacionWebhookDTO;
 import com.example.demo.dto.ZonaAltaWebhookDTO;
 import com.example.demo.dto.ZonaModificacionWebhookDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.entity.Habilidad;
+import com.example.demo.entity.Rubro;
 import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.CotizacionService;
@@ -17,6 +20,7 @@ import com.example.demo.service.RubroSyncService;
 import com.example.demo.service.ZonaSyncService;
 import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
+import com.example.demo.service.HabilidadSyncService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +51,7 @@ public class WebhookTestController {
     private final PrestadorSyncService prestadorSyncService;
     private final RubroSyncService rubroSyncService;
     private final ZonaSyncService zonaSyncService;
+    private final HabilidadSyncService habilidadSyncService;
     private final ObjectMapper objectMapper;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
@@ -110,12 +115,24 @@ public class WebhookTestController {
             boolean solicitudCancelada = false;
             Long solicitudIdCancelada = null;
             List<String> solicitudCancelWarnings = new ArrayList<>();
+            boolean habilidadProcesada = false;
+            Long habilidadIdProcesada = null;
+            List<String> habilidadWarnings = new ArrayList<>();
+            boolean habilidadModificada = false;
+            Long habilidadIdModificada = null;
+            List<String> habilidadModWarnings = new ArrayList<>();
             boolean cotizacionAceptada = false;
             Map<String, Object> cotizacionAceptadaDetails = null;
             List<String> cotizacionAceptadaWarnings = new ArrayList<>();
             boolean prestadorProcesado = false;
             Long prestadorIdProcesado = null;
             List<String> prestadorWarnings = new ArrayList<>();
+            boolean prestadorModificado = false;
+            Long prestadorIdModificado = null;
+            List<String> prestadorModWarnings = new ArrayList<>();
+            boolean prestadorBajaProcesado = false;
+            Long prestadorBajaId = null;
+            List<String> prestadorBajaWarnings = new ArrayList<>();
             boolean rubroProcesado = false;
             Long rubroIdProcesado = null;
             List<String> rubroWarnings = new ArrayList<>();
@@ -233,6 +250,111 @@ public class WebhookTestController {
 
             if (payloadSection != null
                     && topic != null
+                    && topic.equalsIgnoreCase("catalogue.prestador.modificacion")
+                    && "modificacion_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                // TODO(suscripciones): ajustar filtros definitivos para modificación de prestador
+                try {
+                    PrestadorAltaWebhookDTO prestadorMod = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
+                    if (prestadorMod.getId() == null) {
+                        prestadorModWarnings.add("payload.id ausente en modificacion de prestador");
+                        log.warn("Modificación de prestador sin id: {}", payloadSection);
+                    } else {
+                        PrestadorDTO dto = buildPrestadorDtoFromAlta(prestadorMod, prestadorModWarnings);
+                        prestadorSyncService.upsertDesdeDTO(dto);
+                        prestadorModificado = true;
+                        prestadorIdModificado = dto.getId();
+                    }
+                } catch (IllegalArgumentException e) {
+                    prestadorModWarnings.add(e.getMessage());
+                    log.warn("Payload de modificacion de prestador inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    prestadorModWarnings.add("Error procesando modificacion de prestador: " + e.getMessage());
+                    log.error("Error procesando modificacion de prestador desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.prestador.baja")
+                    && "baja_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                // TODO(suscripciones): ajustar filtros definitivos para baja de prestador
+                try {
+                    PrestadorAltaWebhookDTO prestadorBaja = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
+                    if (prestadorBaja.getId() == null) {
+                        prestadorBajaWarnings.add("payload.id ausente en baja de prestador");
+                        log.warn("Baja de prestador sin id: {}", payloadSection);
+                    } else {
+                        PrestadorDTO prestadorDTO = buildPrestadorDtoFromAlta(prestadorBaja, prestadorBajaWarnings);
+                        prestadorSyncService.upsertDesdeDTO(prestadorDTO);
+                        prestadorBajaProcesado = true;
+                        prestadorBajaId = prestadorDTO.getId();
+                    }
+                } catch (IllegalArgumentException e) {
+                    prestadorBajaWarnings.add(e.getMessage());
+                    log.warn("Payload de baja de prestador inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    prestadorBajaWarnings.add("Error procesando baja de prestador: " + e.getMessage());
+                    log.error("Error procesando baja de prestador desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.habilidad.alta")
+                    && "alta_habilidad".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                // TODO(suscripciones): revisar canal/evento definitivo para alta de habilidades
+                try {
+                    HabilidadAltaWebhookDTO habilidadAlta = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
+                    if (habilidadAlta.getId() == null) {
+                        habilidadWarnings.add("payload.id ausente en alta de habilidad");
+                        log.warn("Alta de habilidad sin id: {}", payloadSection);
+                    } else if (habilidadAlta.getIdRubro() == null) {
+                        habilidadWarnings.add("payload.id_rubro ausente en alta de habilidad");
+                        log.warn("Alta de habilidad {} sin id_rubro", habilidadAlta.getId());
+                    } else {
+                        habilidadSyncService.upsertDesdeDTO(habilidadAlta);
+                        habilidadProcesada = true;
+                        habilidadIdProcesada = habilidadAlta.getId();
+                    }
+                } catch (IllegalArgumentException e) {
+                    habilidadWarnings.add(e.getMessage());
+                    log.warn("Payload de alta de habilidad inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    habilidadWarnings.add("Error procesando alta de habilidad: " + e.getMessage());
+                    log.error("Error procesando alta de habilidad desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
+                    && topic.equalsIgnoreCase("catalogue.habilidad.modificacion")
+                    && ("modificacion_habilidad".equalsIgnoreCase(firstNonNull(eventName, ""))
+                        || "alta_modificacion".equalsIgnoreCase(firstNonNull(eventName, "")))) {
+                // TODO(suscripciones): revisar canal/evento definitivo para modificación de habilidades
+                try {
+                    HabilidadAltaWebhookDTO habilidadMod = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
+                    if (habilidadMod.getId() == null) {
+                        habilidadModWarnings.add("payload.id ausente en modificacion de habilidad");
+                        log.warn("Modificación de habilidad sin id: {}", payloadSection);
+                    } else if (habilidadMod.getIdRubro() == null) {
+                        habilidadModWarnings.add("payload.id_rubro ausente en modificacion de habilidad");
+                        log.warn("Modificación de habilidad {} sin id_rubro", habilidadMod.getId());
+                    } else {
+                        habilidadSyncService.actualizarDesdeDTO(habilidadMod);
+                        habilidadModificada = true;
+                        habilidadIdModificada = habilidadMod.getId();
+                    }
+                } catch (IllegalArgumentException e) {
+                    habilidadModWarnings.add(e.getMessage());
+                    log.warn("Payload de modificacion de habilidad inválido: {}", e.getMessage());
+                } catch (Exception e) {
+                    habilidadModWarnings.add("Error procesando modificacion de habilidad: " + e.getMessage());
+                    log.error("Error procesando modificacion de habilidad desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topic != null
                     && topic.equalsIgnoreCase("catalogue.rubro.alta")
                     && "alta_rubro".equalsIgnoreCase(firstNonNull(eventName, ""))) {
                 try {
@@ -337,12 +459,40 @@ public class WebhookTestController {
             if (!cotizacionAceptadaWarnings.isEmpty()) {
                 storedPayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
             }
+            storedPayload.put("habilidadProcesada", habilidadProcesada);
+            if (habilidadIdProcesada != null) {
+                storedPayload.put("habilidadId", habilidadIdProcesada);
+            }
+            if (!habilidadWarnings.isEmpty()) {
+                storedPayload.put("habilidadWarnings", habilidadWarnings);
+            }
+            storedPayload.put("habilidadModificada", habilidadModificada);
+            if (habilidadIdModificada != null) {
+                storedPayload.put("habilidadIdModificada", habilidadIdModificada);
+            }
+            if (!habilidadModWarnings.isEmpty()) {
+                storedPayload.put("habilidadModWarnings", habilidadModWarnings);
+            }
             storedPayload.put("prestadorProcesado", prestadorProcesado);
             if (prestadorIdProcesado != null) {
                 storedPayload.put("prestadorId", prestadorIdProcesado);
             }
             if (!prestadorWarnings.isEmpty()) {
                 storedPayload.put("prestadorWarnings", prestadorWarnings);
+            }
+            storedPayload.put("prestadorModificado", prestadorModificado);
+            if (prestadorIdModificado != null) {
+                storedPayload.put("prestadorIdModificado", prestadorIdModificado);
+            }
+            if (!prestadorModWarnings.isEmpty()) {
+                storedPayload.put("prestadorModWarnings", prestadorModWarnings);
+            }
+            storedPayload.put("prestadorBajaProcesado", prestadorBajaProcesado);
+            if (prestadorBajaId != null) {
+                storedPayload.put("prestadorBajaId", prestadorBajaId);
+            }
+            if (!prestadorBajaWarnings.isEmpty()) {
+                storedPayload.put("prestadorBajaWarnings", prestadorBajaWarnings);
             }
             storedPayload.put("rubroProcesado", rubroProcesado);
             if (rubroIdProcesado != null) {
@@ -400,12 +550,40 @@ public class WebhookTestController {
             if (!cotizacionAceptadaWarnings.isEmpty()) {
                 responsePayload.put("cotizacionAceptadaWarnings", cotizacionAceptadaWarnings);
             }
+            responsePayload.put("habilidadProcesada", habilidadProcesada);
+            if (habilidadIdProcesada != null) {
+                responsePayload.put("habilidadId", habilidadIdProcesada);
+            }
+            if (!habilidadWarnings.isEmpty()) {
+                responsePayload.put("habilidadWarnings", habilidadWarnings);
+            }
+            responsePayload.put("habilidadModificada", habilidadModificada);
+            if (habilidadIdModificada != null) {
+                responsePayload.put("habilidadIdModificada", habilidadIdModificada);
+            }
+            if (!habilidadModWarnings.isEmpty()) {
+                responsePayload.put("habilidadModWarnings", habilidadModWarnings);
+            }
             responsePayload.put("prestadorProcesado", prestadorProcesado);
             if (prestadorIdProcesado != null) {
                 responsePayload.put("prestadorId", prestadorIdProcesado);
             }
             if (!prestadorWarnings.isEmpty()) {
                 responsePayload.put("prestadorWarnings", prestadorWarnings);
+            }
+            responsePayload.put("prestadorModificado", prestadorModificado);
+            if (prestadorIdModificado != null) {
+                responsePayload.put("prestadorIdModificado", prestadorIdModificado);
+            }
+            if (!prestadorModWarnings.isEmpty()) {
+                responsePayload.put("prestadorModWarnings", prestadorModWarnings);
+            }
+            responsePayload.put("prestadorBajaProcesado", prestadorBajaProcesado);
+            if (prestadorBajaId != null) {
+                responsePayload.put("prestadorBajaId", prestadorBajaId);
+            }
+            if (!prestadorBajaWarnings.isEmpty()) {
+                responsePayload.put("prestadorBajaWarnings", prestadorBajaWarnings);
             }
             responsePayload.put("rubroProcesado", rubroProcesado);
             if (rubroIdProcesado != null) {
@@ -637,12 +815,15 @@ public class WebhookTestController {
                 "sin-email-" + evento.getId() + "@desconocido.local"
         );
         String telefono = sanitizeOrFallback(evento.getTelefono(), "telefono", warnings, "-");
-        String direccion = sanitizeOrFallback(evento.getDireccion(), "direccion", warnings, "Sin direccion");
+        String direccion = buildDireccion(evento, warnings);
         String estado = (evento.getActivo() != null && evento.getActivo() == 1) ? "ACTIVO" : "INACTIVO";
         if (evento.getActivo() == null) {
             warnings.add("payload.activo ausente, se asumió estado INACTIVO");
         }
         warnings.add("payload.precioHora ausente, se utilizó 0.0");
+
+        Long zonaId = extractZonaId(evento, warnings);
+        List<Habilidad> habilidades = buildHabilidadesFromEvento(evento, warnings);
 
         return PrestadorDTO.builder()
                 .id(evento.getId())
@@ -653,8 +834,8 @@ public class WebhookTestController {
                 .direccion(direccion)
                 .estado(estado)
                 .precioHora(0.0)
-                .zonaId(null)
-                .habilidades(List.of())
+                .zonaId(zonaId)
+                .habilidades(habilidades)
                 .calificacion(List.of())
                 .trabajosFinalizados(0)
                 .build();
@@ -666,6 +847,91 @@ public class WebhookTestController {
         }
         warnings.add("payload." + fieldName + " ausente, se usó '" + fallback + "'");
         return fallback;
+    }
+
+    private String buildDireccion(PrestadorAltaWebhookDTO evento, List<String> warnings) {
+        if (evento == null) {
+            warnings.add("payload.direccion ausente, se usó 'Sin direccion'");
+            return "Sin direccion";
+        }
+        if (isNotBlank(evento.getDireccion())) {
+            return evento.getDireccion().trim();
+        }
+
+        List<String> partes = new ArrayList<>();
+        if (isNotBlank(evento.getCalle())) {
+            StringBuilder calleNumero = new StringBuilder(evento.getCalle().trim());
+            if (isNotBlank(evento.getNumero())) {
+                calleNumero.append(" ").append(evento.getNumero().trim());
+            }
+            partes.add(calleNumero.toString());
+        }
+        if (isNotBlank(evento.getPiso())) {
+            partes.add("Piso " + evento.getPiso().trim());
+        }
+        if (isNotBlank(evento.getDepartamento())) {
+            partes.add("Depto " + evento.getDepartamento().trim());
+        }
+        if (isNotBlank(evento.getCiudad())) {
+            partes.add(evento.getCiudad().trim());
+        }
+        if (isNotBlank(evento.getEstado())) {
+            partes.add(evento.getEstado().trim());
+        }
+
+        if (partes.isEmpty()) {
+            warnings.add("payload.direccion ausente, se usó 'Sin direccion'");
+            return "Sin direccion";
+        }
+        return String.join(", ", partes);
+    }
+
+    private boolean isNotBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private Long extractZonaId(PrestadorAltaWebhookDTO evento, List<String> warnings) {
+        if (evento.getZonas() == null || evento.getZonas().isEmpty()) {
+            warnings.add("payload.zonas ausente o vacío, se mantuvo zona actual");
+            return null;
+        }
+        PrestadorAltaWebhookDTO.ZonaItem zonaItem = evento.getZonas().get(0);
+        if (zonaItem == null || zonaItem.getId() == null) {
+            warnings.add("payload.zonas[0].id ausente, se mantuvo zona actual");
+            return null;
+        }
+        if (evento.getZonas().size() > 1) {
+            warnings.add("payload.zonas contiene múltiples entradas, se tomó la primera");
+        }
+        return zonaItem.getId();
+    }
+
+    private List<Habilidad> buildHabilidadesFromEvento(PrestadorAltaWebhookDTO evento, List<String> warnings) {
+        if (evento.getHabilidades() == null || evento.getHabilidades().isEmpty()) {
+            return List.of();
+        }
+        List<Habilidad> habilidades = new ArrayList<>();
+        for (PrestadorAltaWebhookDTO.HabilidadItem item : evento.getHabilidades()) {
+            if (item == null) {
+                continue;
+            }
+            if (item.getId() == null) {
+                warnings.add("habilidad sin id ignorada para prestador " + evento.getId());
+                continue;
+            }
+            Habilidad h = new Habilidad();
+            h.setId(item.getId()); // interpretado como ID externo en PrestadorSyncService
+            h.setExternalId(item.getId());
+            h.setNombre(item.getNombre());
+            if (item.getIdRubro() != null) {
+                Rubro r = new Rubro();
+                r.setId(item.getIdRubro());
+                r.setExternalId(item.getIdRubro());
+                h.setRubro(r);
+            }
+            habilidades.add(h);
+        }
+        return habilidades;
     }
 
     private String getStackTrace(Throwable t) {

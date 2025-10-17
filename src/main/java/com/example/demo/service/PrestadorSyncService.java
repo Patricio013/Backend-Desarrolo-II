@@ -32,13 +32,17 @@ public class PrestadorSyncService {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Prestador upsertDesdeDTO(PrestadorDTO dto) {
     // 1) Zona
-    Zona zona = (dto.getZonaId() != null)
-        ? zonaRepository.findByExternalId(dto.getZonaId())
-            .orElseThrow(() -> new IllegalArgumentException("Zona no encontrada: " + dto.getZonaId()))
-        : null;
+    Zona zona = null;
+    if (dto.getZonaId() != null) {
+      zona = zonaRepository.findByExternalId(dto.getZonaId())
+          .orElseThrow(() -> new IllegalArgumentException("Zona no encontrada: " + dto.getZonaId()));
+    }
 
     // 2) Habilidades (resolver existentes o crear)
-    List<Habilidad> habilidades = resolveOrCreateHabilidades(dto.getHabilidades());
+    List<Habilidad> habilidades = null;
+    if (dto.getHabilidades() != null) {
+      habilidades = resolveOrCreateHabilidades(dto.getHabilidades());
+    }
 
     // 3) Prestador (upsert)
     Prestador p = prestadorRepository.findByExternalId(dto.getId()).orElseGet(Prestador::new);
@@ -50,7 +54,9 @@ public class PrestadorSyncService {
     p.setDireccion(dto.getDireccion());
     p.setEstado(dto.getEstado());
     p.setPrecioHora(dto.getPrecioHora());
-    p.setZona(zona);
+    if (zona != null) {
+      p.setZona(zona);
+    }
 
     // calificaciones (defensivo)
     if (p.getCalificacion() == null) {
@@ -66,8 +72,10 @@ public class PrestadorSyncService {
     p.setTrabajosFinalizados(dto.getTrabajosFinalizados() != null ? dto.getTrabajosFinalizados() : 0);
 
     // vincular habilidades (reemplazo controlado)
-    p.getHabilidades().clear();
-    p.getHabilidades().addAll(habilidades);
+    if (habilidades != null) {
+      p.getHabilidades().clear();
+      p.getHabilidades().addAll(habilidades);
+    }
 
     return prestadorRepository.save(p);
   }
