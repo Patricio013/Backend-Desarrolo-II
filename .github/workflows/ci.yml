@@ -456,7 +456,6 @@ jobs:
           echo "🧪 Generando resumen Cypress en Markdown..."
           mkdir -p metrics
 
-          # ✅ Crear el resumen Markdown
           echo "## 🧪 Cypress Summary" > metrics/cypress_summary.md
 
           if jq empty metrics/cypress.json 2>/dev/null; then
@@ -481,7 +480,6 @@ jobs:
           echo "✅ Markdown generado en metrics/cypress_summary.md"
           cat metrics/cypress_summary.md
 
-          # 🚀 Publicar en gh-pages
           echo "📤 Subiendo resumen Markdown a gh-pages..."
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
@@ -492,7 +490,7 @@ jobs:
 
           cd .ghpages-temp
           git init
-          git checkout -b gh-pages
+          git checkout -B gh-pages  # 👈 este cambio evita el error
 
           git add .
           git commit -m "🧪 Cypress summary (Markdown) $(date -u +%FT%TZ)"
