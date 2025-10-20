@@ -490,15 +490,23 @@ jobs:
 
           echo "✅ Publicado en https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/summary.md"
 
-      - name: 📤 Publicar resultados de Cypress en gh-pages
+      - name: 📥 Descargar artifact Cypress
+        uses: actions/download-artifact@v4
+        with:
+          name: cypress-results
+          path: ./downloaded-cypress
+
+      - name: 📤 Publicar Cypress results en gh-pages
         if: always()
         run: |
           mkdir -p .ghpages-temp
-          cp out/cypress/results.json .ghpages-temp/cypress-results.json
+          cp downloaded-cypress/results.json .ghpages-temp/cypress-results.json
+
           cd .ghpages-temp
           git init
           git checkout -b gh-pages
           git add .
           git commit -m "📊 Cypress results $(date -u +%FT%TZ)"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
+
 
