@@ -489,17 +489,17 @@ jobs:
 
           echo "✅ Publicado en https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/summary.md"
 
-      - name: 📄 Convertir resultados Cypress a Markdown y subir a gh-pages
+      - name: 📄 Convertir y publicar Cypress results a Markdown
         if: always()
         run: |
           echo "🔍 Buscando results.json..."
           mkdir -p metrics
 
-          # Buscar results.json en cualquier subcarpeta (out/, artifacts/, etc.)
-          CYPRESS_JSON=$(find . -type f -path "*/cypress*/results.json" | head -n 1)
+          # 1️⃣ Buscar results.json (en cualquier lugar)
+          CYPRESS_JSON=$(find . -type f -name "results.json" | grep "cypress" | head -n 1)
 
           if [ -z "$CYPRESS_JSON" ]; then
-            echo "⚠️ No se encontró results.json, generando resumen vacío."
+            echo "⚠️ No se encontró results.json. Guardando resumen vacío."
             echo -e "## 🧪 Cypress Summary\n\n_No se encontraron resultados de Cypress._" > metrics/cypress_summary.md
           else
             echo "✅ Encontrado en: $CYPRESS_JSON"
@@ -517,10 +517,15 @@ jobs:
             echo "" >> metrics/cypress_summary.md
 
             echo "### 🧾 Detalle por Spec" >> metrics/cypress_summary.md
-            jq -r '.results[] | "| \(.file) | \([.suites[].tests[]] | length) | \([.suites[].tests[] | select(.state==\"passed\")] | length) | \([.suites[].tests[] | select(.state==\"failed\")] | length) |"' "$CYPRESS_JSON" >> metrics/cypress_summary.md
+            jq -r '
+              .results[] | 
+              "| \(.file) | \([.suites[].tests[]] | length) | " +
+              "\([.suites[].tests[] | select(.state==\"passed\")] | length) | " +
+              "\([.suites[].tests[] | select(.state==\"failed\")] | length) |"
+            ' "$CYPRESS_JSON" >> metrics/cypress_summary.md
           fi
 
-          # Agregar metadatos del commit y rama
+          # 2️⃣ Adjuntar metadatos
           {
             echo ""
             echo "---"
@@ -529,16 +534,17 @@ jobs:
             echo "**Generado:** $(date -u +%FT%TZ)"
           } >> metrics/cypress_summary.md
 
-          echo "✅ Markdown generado:"
+          echo "✅ Markdown final generado:"
           cat metrics/cypress_summary.md
 
-          # 🚀 Publicar en gh-pages
+          # 3️⃣ Subir a gh-pages
+          echo "🚀 Publicando en gh-pages..."
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           mkdir -p .ghpages-temp
           cp metrics/cypress_summary.md .ghpages-temp/
           cd .ghpages-temp
-          rm -rf .git    # ✅ evita error por branch existente
+          rm -rf .git # evita error si ya existe
           git init
           git checkout -b gh-pages
           git add .
