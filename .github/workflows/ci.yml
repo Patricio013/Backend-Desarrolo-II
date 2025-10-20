@@ -450,30 +450,45 @@ jobs:
 
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
 
-      - name: 🚀 Publicar artefactos Cypress en gh-pages
+      - name: 🧾 Guardar y publicar el resumen de Actions como Markdown
         if: always()
         run: |
-          echo "📦 Publicando artefactos de Cypress en gh-pages..."
+          echo "🧩 Guardando el resumen de GitHub Actions..."
+
+          mkdir -p metrics
+
+          # Copiar el resumen generado por GitHub Actions
+          if [ -n "$GITHUB_STEP_SUMMARY" ] && [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            cp "$GITHUB_STEP_SUMMARY" metrics/summary.md
+            echo "✅ Resumen copiado desde \$GITHUB_STEP_SUMMARY"
+          else
+            echo "_⚠️ No se encontró el resumen de Actions._" > metrics/summary.md
+          fi
+
+          # Adjuntar metadatos
+          echo "" >> metrics/summary.md
+          echo "---" >> metrics/summary.md
+          echo "**Commit:** ${GITHUB_SHA}" >> metrics/summary.md
+          echo "**Branch:** ${GITHUB_REF_NAME}" >> metrics/summary.md
+          echo "**Generado:** $(date -u +%FT%TZ)" >> metrics/summary.md
+
+          # Publicar en gh-pages
+          echo "🚀 Publicando summary.md en gh-pages..."
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
 
-          # Crear carpeta temporal y copiar los resultados de Cypress
           mkdir -p .ghpages-temp
-          cp -r artifacts/cypress-results/* .ghpages-temp/
-
-          # Incluir metadatos
-          echo "{ \"generated_at\": \"$(date -u +%FT%TZ)\", \"commit\": \"${GITHUB_SHA}\", \"branch\": \"${GITHUB_REF_NAME}\" }" > .ghpages-temp/meta.json
+          cp metrics/summary.md .ghpages-temp/
+          cp metrics/meta.json .ghpages-temp/ || true
 
           cd .ghpages-temp
-          rm -rf .git  # Limpia repos anteriores
           git init
           git checkout -B gh-pages
           git add .
-          git commit -m "📦 Cypress artifacts $(date -u +%FT%TZ)"
+          git commit -m "📋 Workflow Summary $(date -u +%FT%TZ)"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
 
-          echo "✅ Artefactos Cypress publicados en GitHub Pages"
-
+          echo "✅ Publicado en https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/summary.md"
 
       - name: 📤 Publicar resultados de Cypress en gh-pages
         if: always()
