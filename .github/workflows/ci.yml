@@ -489,43 +489,42 @@ jobs:
 
           echo "✅ Publicado en https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/summary.md"
 
-      - name: 📄 Convertir y publicar Cypress results a Markdown
+      - name: 📄 Convertir resultados Cypress a Markdown y subir a gh-pages
         if: always()
         run: |
-          echo "🔍 Buscando results.json..."
+          echo "🔍 Buscando cypress.log para el reporte de gh-pages..."
           mkdir -p metrics
 
-          # 1️⃣ Buscar results.json (en cualquier lugar)
-          CYPRESS_JSON=$(find . -type f -name "results.json" | grep "cypress" | head -n 1)
+          # Busca el cypress.log descargado de los artefactos
+          CYPRESS_LOG=$(find . -type f -path "*/cypress*/cypress.log" | head -n 1)
 
-          if [ -z "$CYPRESS_JSON" ]; then
-            echo "⚠️ No se encontró results.json. Guardando resumen vacío."
-            echo -e "## 🧪 Cypress Summary\n\n_No se encontraron resultados de Cypress._" > metrics/cypress_summary.md
+          if [ -z "$CYPRESS_LOG" ]; then
+            echo "⚠️ No se encontró cypress.log en los artefactos, generando resumen vacío."
+            echo -e "## 🧪 Cypress Summary\n\n_No se encontraron resultados de Cypress (cypress.log no encontrado)._" > metrics/cypress_summary.md
           else
-            echo "✅ Encontrado en: $CYPRESS_JSON"
-
-            total=$(jq '[.results[].suites[].tests[]] | length' "$CYPRESS_JSON")
-            passed=$(jq '[.results[].suites[].tests[] | select(.state=="passed")] | length' "$CYPRESS_JSON")
-            failed=$(jq '[.results[].suites[].tests[] | select(.state=="failed")] | length' "$CYPRESS_JSON")
-            pending=$(jq '[.results[].suites[].tests[] | select(.state=="pending" or .state=="skipped")] | length' "$CYPRESS_JSON")
-
+            echo "✅ Encontrado en: $CYPRESS_LOG"
+            
+            # Saca colores ANSI para un parseo limpio
+            clean_log=$(sed 's/\x1b\[[0-9;]*m//g' "$CYPRESS_LOG")
+            
             echo "## 🧪 Cypress E2E Summary" > metrics/cypress_summary.md
             echo "" >> metrics/cypress_summary.md
-            echo "| Total | Passed | Failed | Pending |" >> metrics/cypress_summary.md
-            echo "|------:|-------:|-------:|--------:|" >> metrics/cypress_summary.md
-            echo "| $total | $passed | $failed | $pending |" >> metrics/cypress_summary.md
+            echo "### Specs" >> metrics/cypress_summary.md
+            echo '| Spec | Tests | Passing | Failing |' >> metrics/cypress_summary.md
+            echo '|------|-------:|--------:|--------:|' >> metrics/cypress_summary.md
+            
+            # Re-usar la misma lógica de parseo del step 'Resumen Cypress'
+            echo "$clean_log" | grep -E "✔|✖" | awk '{ if ($2 != "All") printf "| %s | %s | %s | %s |\n", $2, $3, $4, $5 }' >> metrics/cypress_summary.md
             echo "" >> metrics/cypress_summary.md
 
-            echo "### 🧾 Detalle por Spec" >> metrics/cypress_summary.md
-            jq -r '
-              .results[] | 
-              "| \(.file) | \([.suites[].tests[]] | length) | " +
-              "\([.suites[].tests[] | select(.state==\"passed\")] | length) | " +
-              "\([.suites[].tests[] | select(.state==\"failed\")] | length) |"
-            ' "$CYPRESS_JSON" >> metrics/cypress_summary.md
+            # Opcional: Agregar el resumen final de texto
+            echo "### Resumen Final" >> metrics/cypress_summary.md
+            echo '```' >> metrics/cypress_summary.md
+            echo "$clean_log" | awk '/Running:/,0' | tail -n 10 >> metrics/cypress_summary.md
+            echo '```' >> metrics/cypress_summary.md
           fi
 
-          # 2️⃣ Adjuntar metadatos
+          # Agregar metadatos del commit y rama
           {
             echo ""
             echo "---"
@@ -534,17 +533,16 @@ jobs:
             echo "**Generado:** $(date -u +%FT%TZ)"
           } >> metrics/cypress_summary.md
 
-          echo "✅ Markdown final generado:"
+          echo "✅ Markdown generado para gh-pages:"
           cat metrics/cypress_summary.md
 
-          # 3️⃣ Subir a gh-pages
-          echo "🚀 Publicando en gh-pages..."
+          # 🚀 Publicar en gh-pages
           git config --global user.name "github-actions"
           git config --global user.email "actions@github.com"
           mkdir -p .ghpages-temp
           cp metrics/cypress_summary.md .ghpages-temp/
           cd .ghpages-temp
-          rm -rf .git # evita error si ya existe
+          rm -rf .git
           git init
           git checkout -b gh-pages
           git add .
