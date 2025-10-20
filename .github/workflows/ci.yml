@@ -496,15 +496,15 @@ jobs:
           echo "🔍 Buscando results.json..."
           mkdir -p metrics
 
-          # Buscar el archivo results.json (puede estar dentro de artifacts)
-          CYPRESS_JSON=$(find artifacts -type f -name "results.json" | head -n 1)
+          # Buscar results.json en cualquier subcarpeta (out/, artifacts/, etc.)
+          CYPRESS_JSON=$(find . -type f -path "*/cypress*/results.json" | head -n 1)
 
           if [ -z "$CYPRESS_JSON" ]; then
             echo "⚠️ No se encontró results.json, generando resumen vacío."
-            echo "## 🧪 Cypress Summary\n\n_No se encontraron resultados de Cypress._" > metrics/cypress_summary.md
+            echo -e "## 🧪 Cypress Summary\n\n_No se encontraron resultados de Cypress._" > metrics/cypress_summary.md
           else
             echo "✅ Encontrado en: $CYPRESS_JSON"
-            
+
             total=$(jq '[.results[].suites[].tests[]] | length' "$CYPRESS_JSON")
             passed=$(jq '[.results[].suites[].tests[] | select(.state=="passed")] | length' "$CYPRESS_JSON")
             failed=$(jq '[.results[].suites[].tests[] | select(.state=="failed")] | length' "$CYPRESS_JSON")
@@ -539,6 +539,7 @@ jobs:
           mkdir -p .ghpages-temp
           cp metrics/cypress_summary.md .ghpages-temp/
           cd .ghpages-temp
+          rm -rf .git    # ✅ evita error por branch existente
           git init
           git checkout -b gh-pages
           git add .
