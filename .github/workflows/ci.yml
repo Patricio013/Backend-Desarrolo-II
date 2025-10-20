@@ -481,8 +481,9 @@ jobs:
           cp metrics/meta.json .ghpages-temp/ || true
 
           cd .ghpages-temp
+          rm -rf .git  # 👈 limpiar cualquier repo anterior
           git init
-          git checkout -b gh-pages
+          git checkout -B gh-pages  # 👈 usar -B para crear o reemplazar la rama
           git add .
           git commit -m "🧪 Cypress summary (from GITHUB_STEP_SUMMARY) $(date -u +%FT%TZ)"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" gh-pages
