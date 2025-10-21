@@ -7,8 +7,10 @@ import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
+import com.example.demo.entity.SolicitudInvitacion;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.PrestadorRepository;
+import com.example.demo.repository.SolicitudInvitacionRepository;
 import com.example.demo.repository.SolicitudRepository;
 
 import org.slf4j.Logger;
@@ -18,14 +20,17 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.List;
+import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Objects;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,12 +38,19 @@ public class SolicitudService {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitudService.class);
 
+    private static final int INITIAL_INVITES_NON_CRITICA = 3;
+    private static final int INITIAL_INVITES_CRITICA = 10;
+    private static final int MAX_INVITES_NON_CRITICA = 6;
+    private static final int MAX_INVITES_CRITICA = 12;
+    private static final int CANDIDATE_BATCH_SIZE = 20;
+
     @Autowired private NotificacionesService notificacionesService;
     @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
     @Autowired private PrestadorRepository prestadorRepository;
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
+    @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
 
     @Transactional
     public SolicitudTop3Resultado recotizar(Long solicitudId) {
@@ -66,18 +78,24 @@ public class SolicitudService {
             .filter(p -> estaLibre(p, solicitud))
             .toList();
 
-        List<Prestador> top3 = candidatos.stream().limit(3).toList();
-        if (top3.isEmpty()) {
+        int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
+        List<Prestador> seleccion = candidatos.stream().limit(maxInicial).toList();
+        if (seleccion.isEmpty()) {
             var out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name()); // sigue CANCELADA
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
 
         // Volver a COTIZANDO y enviar
+        solicitud.setCotizacionRound(solicitud.getCotizacionRound() + 1);
+        solicitud.setCotizacionRoundStartedAt(LocalDateTime.now());
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO (recotización)
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -88,31 +106,25 @@ public class SolicitudService {
             Map.of()
         );
 
-        var invitaciones = top3.stream()
-            .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Recotización: invitación a cotizar"))
-            .peek(dto -> {
-                dto.setEnviado(cotizacionClient.enviarInvitacion(dto));
-                Long ref = dto.getCotizacionId() != null ? dto.getCotizacionId() : dto.getSolicitudId();
-                notificacionesService.notificarInvitacionCotizacion(
-                    ref,
-                    "Recotización: invitación enviada",
-                    "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
-                );
-                // Evento WS por invitación
-                solicitudEventsPublisher.notifySolicitudEvent(
-                    solicitud,
-                    "INVITACION_ENVIADA",
-                    "Recotización: invitación enviada",
-                    "Se invitó al prestador " + dto.getPrestadorId(),
-                    Map.of("prestadorId", dto.getPrestadorId())
-                );
-            })
-            .collect(Collectors.toList());
+        List<InvitacionCotizacionDTO> invitaciones = new ArrayList<>();
+        for (Prestador prestador : seleccion) {
+            invitaciones.add(enviarInvitacion(
+                solicitud,
+                rubroId,
+                prestador,
+                "Recotización: invitación a cotizar",
+                "Recotización: invitación enviada",
+                "Recotización: invitación enviada",
+                "Se invitó al prestador "
+            ));
+        }
 
         var out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(invitaciones);
         return out;
     }
@@ -140,22 +152,27 @@ public class SolicitudService {
             rubroId, PageRequest.of(0, 10) // pedí más de 3 para que haya margen al filtrar
         );
 
-        List<Prestador> top3 = candidatos.stream()
+        int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
+        List<Prestador> seleccion = candidatos.stream()
             .filter(p -> estaLibre(p, solicitud))
-            .limit(3)
+            .limit(maxInicial)
             .toList();
 
-        if (top3.isEmpty()) {
+        if (seleccion.isEmpty()) {
             log.warn("Sin candidatos ACTIVO para rubro {} (solicitud {}) — se mantiene en CREADA", rubroId, solicitud.getId());
             SolicitudTop3Resultado out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name());
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
+        solicitud.setCotizacionRoundStartedAt(LocalDateTime.now());
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -166,31 +183,25 @@ public class SolicitudService {
             Map.of()
         );
 
-        var invitaciones = top3.stream()
-            .map(p -> buildInvitacionDTO(solicitud, rubroId, p, "Invitación a cotizar"))
-            .peek(dto -> dto.setEnviado(cotizacionClient.enviarInvitacion(dto)))
-            .peek(dto -> {
-                Long cotizacionId = dto.getCotizacionId() != null ? dto.getCotizacionId() : dto.getSolicitudId();
-                notificacionesService.notificarInvitacionCotizacion(
-                    cotizacionId,
-                    "Invitación de cotización enviada",
-                    "Se envió invitación al prestador " + dto.getPrestadorId() + " para la solicitud " + dto.getSolicitudId()
-                );
-                // Evento WS por invitación
-                solicitudEventsPublisher.notifySolicitudEvent(
-                    solicitud,
-                    "INVITACION_ENVIADA",
-                    "Invitación de cotización enviada",
-                    "Se invitó al prestador " + dto.getPrestadorId(),
-                    Map.of("prestadorId", dto.getPrestadorId())
-                );
-            })
-            .collect(Collectors.toList());
+        List<InvitacionCotizacionDTO> invitaciones = new ArrayList<>();
+        for (Prestador prestador : seleccion) {
+            invitaciones.add(enviarInvitacion(
+                solicitud,
+                rubroId,
+                prestador,
+                "Invitación a cotizar",
+                "Invitación de cotización enviada",
+                "Invitación de cotización enviada",
+                "Se invitó al prestador "
+            ));
+        }
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(invitaciones);
         return out;
     }
@@ -205,6 +216,8 @@ public class SolicitudService {
         if (p == null) {
             log.error("prestador_asignado_id={} no existe (solicitud {})", prestadorId, solicitud.getId());
             out.setEstado(solicitud.getEstado().name());
+            out.setFueCotizada(solicitud.isFueCotizada());
+            out.setEsCritica(solicitud.isEsCritica());
             out.setTop3(List.of());
             return out;
         }
@@ -217,6 +230,7 @@ public class SolicitudService {
         );
 
         aviso.setEnviado(cotizacionClient.enviarInvitacion(aviso));
+        registrarInvitacion(solicitud, p);
 
         Long refCotizacion = (aviso.getCotizacionId() != null) ? aviso.getCotizacionId() : aviso.getSolicitudId();
         notificacionesService.crearNotificacion(
@@ -239,6 +253,8 @@ public class SolicitudService {
         );
 
         solicitud.setEstado(EstadoSolicitud.COTIZANDO);
+        solicitud.setFueCotizada(true);
+        solicitud.setCotizacionRoundStartedAt(LocalDateTime.now());
         solicitudRepository.save(solicitud);
         // Notificar cambio de estado a COTIZANDO
         solicitudEventsPublisher.notifySolicitudEvent(
@@ -250,6 +266,8 @@ public class SolicitudService {
         );
 
         out.setEstado(solicitud.getEstado().name());
+        out.setFueCotizada(solicitud.isFueCotizada());
+        out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(List.of(aviso));
         return out;
     }
@@ -264,6 +282,101 @@ public class SolicitudService {
             .timestamp(LocalDateTime.now())
             .enviado(false)
             .build();
+    }
+
+    private InvitacionCotizacionDTO enviarInvitacion(
+        Solicitud solicitud,
+        Long rubroId,
+        Prestador prestador,
+        String mensajeBase,
+        String tituloNotificacion,
+        String tituloEvento,
+        String descripcionEventoPrefix
+    ) {
+        InvitacionCotizacionDTO dto = buildInvitacionDTO(solicitud, rubroId, prestador, mensajeBase);
+        dto.setEnviado(cotizacionClient.enviarInvitacion(dto));
+
+        Long referencia = dto.getCotizacionId() != null ? dto.getCotizacionId() : dto.getSolicitudId();
+        notificacionesService.notificarInvitacionCotizacion(
+            referencia,
+            tituloNotificacion,
+            "Se envió invitación al prestador " + prestador.getId() + " para la solicitud " + dto.getSolicitudId()
+        );
+
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "INVITACION_ENVIADA",
+            tituloEvento,
+            descripcionEventoPrefix + prestador.getId(),
+            Map.of("prestadorId", prestador.getId())
+        );
+
+        registrarInvitacion(solicitud, prestador);
+        return dto;
+    }
+
+    private void registrarInvitacion(Solicitud solicitud, Prestador prestador) {
+        int round = solicitud.getCotizacionRound();
+        Long solicitudId = solicitud.getId();
+        Long prestadorId = prestador.getId();
+        if (solicitudInvitacionRepository.existsBySolicitud_IdAndPrestador_IdAndRound(solicitudId, prestadorId, round)) {
+            return;
+        }
+        SolicitudInvitacion invitacion = SolicitudInvitacion.builder()
+            .solicitud(solicitud)
+            .prestador(prestador)
+            .round(round)
+            .enviadoAt(LocalDateTime.now())
+            .build();
+        solicitudInvitacionRepository.save(invitacion);
+    }
+
+    @Transactional
+    public boolean invitarPrestadorAdicional(Solicitud solicitud) {
+        Long rubroId = Objects.requireNonNull(solicitud.getRubroId(), "rubroId requerido");
+        int round = solicitud.getCotizacionRound();
+        Set<Long> invitados = new HashSet<>(
+            solicitudInvitacionRepository.findPrestadorIdsBySolicitudAndRound(solicitud.getId(), round)
+        );
+
+        int maxInvitaciones = solicitud.isEsCritica() ? MAX_INVITES_CRITICA : MAX_INVITES_NON_CRITICA;
+        if (invitados.size() >= maxInvitaciones) {
+            log.debug("Solicitud {} alcanzó el máximo de invitaciones ({}) en round {}", solicitud.getId(), maxInvitaciones, round);
+            return false;
+        }
+
+        List<Prestador> candidatos = prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(
+            rubroId,
+            solicitud.getId(),
+            PageRequest.of(0, CANDIDATE_BATCH_SIZE)
+        );
+
+        Long asignado = obtenerPrestadorAsignadoId(solicitud);
+        Prestador elegido = candidatos.stream()
+            .filter(p -> asignado == null || !p.getId().equals(asignado))
+            .filter(p -> estaLibre(p, solicitud))
+            .filter(p -> !invitados.contains(p.getId()))
+            .findFirst()
+            .orElse(null);
+
+        if (elegido == null) {
+            log.debug("Sin prestadores adicionales disponibles para solicitud {} round {}", solicitud.getId(), round);
+            return false;
+        }
+
+        enviarInvitacion(
+            solicitud,
+            rubroId,
+            elegido,
+            "Invitación adicional a cotizar",
+            "Invitación adicional de cotización enviada",
+            "Invitación adicional de cotización enviada",
+            "Se invitó al prestador "
+        );
+
+        solicitud.setCotizacionRoundStartedAt(LocalDateTime.now());
+        solicitudRepository.save(solicitud);
+        return true;
     }
 
     private Long obtenerPrestadorAsignadoId(Solicitud s) {
@@ -341,7 +454,9 @@ public class SolicitudService {
             .rubroId(e.getRubro())
             .descripcion(e.getDescripcion())
             .estado(EstadoSolicitud.CREADA)
-            .prestadorAsignadoId(e.getPrestadorId());
+            .prestadorAsignadoId(e.getPrestadorId())
+            .fueCotizada(Boolean.TRUE.equals(e.getFueCotizada()))
+            .esCritica(Boolean.TRUE.equals(e.getEsCritica()));
 
         // Preferencia horaria
         var ph = e.getPreferenciaHoraria();
@@ -396,6 +511,8 @@ public class SolicitudService {
         String description = "";
         Map<String, Object> details = new HashMap<>();
         details.put("solicitudId", s.getId());
+        details.put("fueCotizada", s.isFueCotizada());
+        details.put("esCritica", s.isEsCritica());
 
         if (estado == null) {
             type = "SOLICITUD_STATUS";

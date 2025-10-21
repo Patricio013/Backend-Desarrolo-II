@@ -21,6 +21,12 @@ public class SolicitudesCreadasDTO {
     @JsonProperty("prestador_id")
     private Long prestadorId; // null => abierta
 
+    @JsonProperty("fue_cotizada")
+    private Boolean fueCotizada;
+
+    @JsonProperty("es_critica")
+    private Boolean esCritica;
+
     @JsonProperty("preferencia_horaria")
     private PreferenciaHorariaDTO preferenciaHoraria;
 
