@@ -1,17 +1,31 @@
-/// <reference types="cypress" />
+describe('⭐ Calificaciones API', () => {
+  const base = '/api/calificaciones';
 
-const BASE = Cypress.env('API_BASE') || 'http://localhost:8080'
+  it('registra calificación', () => {
+    cy.request('POST', `${base}/enviar`, {
+      solicitudId: 1,
+      puntuacion: 5,
+      comentario: 'Excelente servicio'
+    }).then((res) => {
+      expect(res.status).to.eq(200);
+      expect(res.body.success).to.be.true;
+    });
+  });
 
-describe('CalificacionController', () => {
-  const url = `${BASE}/prestadores/calificaciones`
+  it('obtiene calificaciones de un prestador', () => {
+    cy.request('GET', `${base}/prestador/3`).then((res) => {
+      expect(res.status).to.eq(200);
+      expect(res.body).to.be.an('array');
+    });
+  });
 
-  it('envía batch de calificaciones', () => {
-    cy.request('POST', url, [
-      { id: 1, calificacion: 5 },
-      { id: 2, calificacion: 3 }
-    ]).then((res) => {
-      expect(res.status).to.eq(200)
-      expect(res.body).to.eq("ok")
-    })
-  })
-})
+  it('maneja solicitud inexistente', () => {
+    cy.request({
+      method: 'GET',
+      url: `${base}/prestador/9999`,
+      failOnStatusCode: false
+    }).then((res) => {
+      expect(res.status).to.be.oneOf([404, 400]);
+    });
+  });
+});

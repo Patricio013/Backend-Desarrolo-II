@@ -1,80 +1,43 @@
-/// <reference types="cypress" />
+describe('🧾 Solicitudes API', () => {
+  const base = '/api/solicitudes';
 
-const BASE = Cypress.env("API_BASE") || "http://localhost:8080";
-
-describe("SolicitudController", () => {
-  const url = `${BASE}/solicitudes`;
-  let solicitudId;
-
-  before(() => {
-    // Crear prestador válido para los tests de cotización/asignación
-    cy.request("POST", `${BASE}/prestadores-sync`, {
-      id: 99,
-      nombre: "Prestador Test",
-      email: "prestador@test.com",
-      telefono: "111111111",
-      rubro: "Electricista",
-      cuit: "20-99999999-9",
-      direccion: "Zona Industrial 100"
-    });
-  });
-
-  beforeEach(() => {
-    cy.request("POST", `${url}/crear`, [
-      {
-        descripcion: "Setup test",
-        rubro: "Electricista",
-        usuarioId: 5,
-        direccion: "Test Street 50"
-      },
-    ]).then((res) => {
-      solicitudId = res.body[0].id;
-    });
-  });
-
-  it("crear solicitudes", () => {
-    expect(solicitudId).to.exist;
-  });
-
-  it("cancelar solicitud", () => {
-    cy.request("PATCH", `${url}/${solicitudId}/cancelar`).then((res) => {
-      expect([200, 204, 404]).to.include(res.status);
-    });
-  });
-
-  it("recotizar solicitud", () => {
-    cy.request({
-      method: "PUT",
-      url: `${url}/path/${solicitudId}/recotizar`,
-      failOnStatusCode: false,
+  it('crea una nueva solicitud', () => {
+    cy.request('POST', `${base}/crear`, {
+      descripcion: 'Solicitud creada desde Cypress',
+      rubroId: 1,
+      usuarioId: 2,
+      zonaId: 1
     }).then((res) => {
-      expect([200, 204, 404]).to.include(res.status);
-    });
-  });
-
-  it("recibir cotización", () => {
-    cy.request("POST", `${url}/recibirCotizacion`, {
-      solicitudId,
-      prestadorId: 99,
-      monto: 5000,
-    }).then((res) => {
-      expect([201, 400, 404]).to.include(res.status);
-    });
-  });
-
-  it("asignar solicitud", () => {
-    cy.request("POST", `${url}/asignar`, {
-      solicitudId,
-      prestadorId: 99,
-    }).then((res) => {
-      expect([201, 400, 404]).to.include(res.status);
-    });
-  });
-
-  it("listar solicitudes como WS", () => {
-    cy.request("GET", `${url}/ws`).then((res) => {
       expect(res.status).to.eq(200);
-      expect(res.body).to.be.an("array");
+      expect(res.body).to.have.property('id');
+      expect(res.body.descripcion).to.include('Cypress');
+    });
+  });
+
+  it('obtiene solicitudes creadas', () => {
+    cy.request('GET', `${base}/creadas/2`).then((res) => {
+      expect(res.status).to.eq(200);
+      expect(res.body).to.be.an('array');
+    });
+  });
+
+  it('asigna un prestador a solicitud', () => {
+    cy.request('PUT', `${base}/asignar`, {
+      solicitudId: 1,
+      prestadorId: 3
+    }).then((res) => {
+      expect(res.status).to.eq(200);
+      expect(res.body.success).to.be.true;
+    });
+  });
+
+  it('maneja solicitud inexistente', () => {
+    cy.request({
+      method: 'GET',
+      url: `${base}/detalle/9999`,
+      failOnStatusCode: false
+    }).then((res) => {
+      expect(res.status).to.be.oneOf([404, 400]);
     });
   });
 });

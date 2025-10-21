@@ -1,52 +1,35 @@
-/// <reference types="cypress" />
+describe('💳 Pagos API', () => {
+  const base = '/api/pagos';
 
-const BASE = Cypress.env("API_BASE") || "http://localhost:8080";
-
-describe("PagosController", () => {
-  const url = `${BASE}/pagos`;
-
-  it("crea un pago", () => {
-    cy.request("POST", `${BASE}/solicitudes/crear`, [
-      {
-        descripcion: "Instalación de lámpara",
-        rubro: "Electricista",
-        usuarioId: 1,
-        direccion: "Calle Falsa 123"
-      },
-    ]).then((res) => {
-      const solicitudId = res.body[0].id;
-
-      cy.request("POST", url, { solicitudId, monto: 1000 }).then((pago) => {
-        expect([200, 201]).to.include(pago.status);
-        expect(pago.body).to.have.property("solicitudId", solicitudId);
-      });
-    });
-  });
-
-  it("lista pagos recientes", () => {
-    cy.request("GET", `${url}/ultimas`).then((res) => {
+  it('crea un nuevo pago', () => {
+    cy.request('POST', `${base}/crear`, {
+      solicitudId: 1,
+      monto: 1500,
+      medioPago: 'transferencia'
+    }).then((res) => {
       expect(res.status).to.eq(200);
-      expect(res.body).to.be.an("array");
+      expect(res.body.estado).to.exist;
     });
   });
 
-  it("obtiene un pago por id", () => {
-    cy.request("POST", `${BASE}/solicitudes/crear`, [
-      {
-        descripcion: "Pago prueba B",
-        rubro: "Plomería",
-        usuarioId: 2,
-        direccion: "Avenida Siempre Viva 742"
-      },
-    ]).then((res) => {
-      const solicitudId = res.body[0].id;
+  it('actualiza un pago existente', () => {
+    cy.request('PUT', `${base}/actualizar`, {
+      pagoId: 1,
+      estado: 'CONFIRMADO'
+    }).then((res) => {
+      expect(res.status).to.eq(200);
+      expect(res.body.estado).to.eq('CONFIRMADO');
+    });
+  });
 
-      cy.request("POST", url, { solicitudId, monto: 300 }).then((created) => {
-        cy.request(`${url}/${created.body.solicitudId}`).then((res2) => {
-          expect(res2.status).to.eq(200);
-          expect(res2.body.solicitudId).to.eq(created.body.solicitudId);
-        });
-      });
+  it('retorna error al actualizar pago inexistente', () => {
+    cy.request({
+      method: 'PUT',
+      url: `${base}/actualizar`,
+      failOnStatusCode: false,
+      body: { pagoId: 9999, estado: 'CONFIRMADO' }
+    }).then((res) => {
+      expect(res.status).to.be.oneOf([404, 400]);
     });
   });
 });
