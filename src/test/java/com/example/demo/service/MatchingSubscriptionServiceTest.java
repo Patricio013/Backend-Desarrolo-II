@@ -2,7 +2,7 @@ package com.example.demo.service;
 
 import com.example.demo.dto.MatchingSubscriptionRequest;
 import com.example.demo.dto.ModuleResponse;
-import com.example.demo.model.Prestador;
+import com.example.demo.entity.Prestador;
 import com.example.demo.repository.PrestadorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

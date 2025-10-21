@@ -1,9 +1,9 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.ModuleResponse;
-import com.example.demo.model.Prestador;
-import com.example.demo.model.Rubro;
-import com.example.demo.model.Zona;
+import com.example.demo.entity.Prestador;
+import com.example.demo.entity.Rubro;
+import com.example.demo.entity.Zona;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.RubroRepository;
 import com.example.demo.repository.ZonaRepository;

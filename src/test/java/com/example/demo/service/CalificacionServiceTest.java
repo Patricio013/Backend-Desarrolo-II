@@ -1,13 +1,13 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.RecibirCalificacionesDTO;
-import com.example.demo.model.Calificacion;
-import com.example.demo.model.Solicitud;
+import com.example.demo.entity.Calificacion;
+import com.example.demo.entity.Solicitud;
 import com.example.demo.repository.SolicitudRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.NotificacionesRepository;
-import com.example.demo.model.Usuario;
+import com.example.demo.entity.Usuario;
 import com.example.demo.dto.ModuleResponse;
 
 import org.junit.jupiter.api.BeforeEach;

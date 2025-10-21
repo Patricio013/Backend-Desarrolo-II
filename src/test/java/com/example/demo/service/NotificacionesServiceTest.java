@@ -1,7 +1,7 @@
 package com.example.demo.service;
 
-import com.example.demo.model.Notificaciones;
-import com.example.demo.model.Usuario;
+import com.example.demo.entity.Notificaciones;
+import com.example.demo.entity.Usuario;
 import com.example.demo.repository.NotificacionesRepository;
 import com.example.demo.repository.UsuarioRepository;
 import com.example.demo.dto.ModuleResponse;

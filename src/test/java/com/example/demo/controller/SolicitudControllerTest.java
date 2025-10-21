@@ -1,8 +1,8 @@
 package com.example.demo.controller;
 
-import com.example.demo.model.Solicitud;
-import com.example.demo.model.dto.SolicitudPagoDTO;
-import com.example.demo.model.dto.SolicitudTop3Resultado;
+import com.example.demo.entity.Solicitud;
+import com.example.demo.entity.dto.SolicitudPagoDTO;
+import com.example.demo.entity.dto.SolicitudTop3Resultado;
 import com.example.demo.service.CotizacionService;
 import com.example.demo.service.SolicitudService;
 import org.junit.jupiter.api.BeforeEach;

@@ -2,9 +2,9 @@ package com.example.demo.service;
 
 import com.example.demo.dto.SolicitudPagoCreateDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
-import com.example.demo.enums.EstadoSolicitudPago;
-import com.example.demo.model.Solicitud;
-import com.example.demo.model.SolicitudPago;
+import com.example.demo.entity.enums.EstadoSolicitudPago;
+import com.example.demo.entity.Solicitud;
+import com.example.demo.entity.SolicitudPago;
 import com.example.demo.repository.SolicitudPagoRepository;
 import com.example.demo.repository.SolicitudRepository;
 
