@@ -21,7 +21,9 @@ public record MatchingIntegrationProperties(
         String publishTop3Channel,
         String publishTop3EventName,
         String publishCotizacionesChannel,
-        String publishCotizacionesEventName
+        String publishCotizacionesEventName,
+        String publishPagoChannel,
+        String publishPagoEventName
 ) {
 
     public MatchingIntegrationProperties {
@@ -72,6 +74,13 @@ public record MatchingIntegrationProperties(
         }
         if (publishCotizacionesEventName == null || publishCotizacionesEventName.isBlank()) {
             throw new IllegalStateException("integrations.matching.publish-cotizaciones-event must not be empty");
+        }
+
+        if (publishPagoChannel == null || publishPagoChannel.isBlank()) {
+            publishPagoChannel = "matching.pago.emitida";
+        }
+        if (publishPagoEventName == null || publishPagoEventName.isBlank()) {
+            publishPagoEventName = "emitida";
         }
     }
 

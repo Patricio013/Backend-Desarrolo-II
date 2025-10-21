@@ -210,4 +210,66 @@ public class MatchingPublisherService {
             return new PublishResult(null, false, HttpStatus.ACCEPTED, reason);
         }
     }
+
+    // ===== Pagos: Solicitud de Pago Emitida =====
+    public PublishResult publishSolicitudPagoEmitida(
+            String idCorrelacion,
+            Long idUsuario,
+            Long idPrestador,
+            Long idSolicitud,
+            BigDecimal montoSubtotal,
+            BigDecimal impuestos,
+            BigDecimal comisiones,
+            String moneda,
+            String metodoPreferido
+    ) {
+        if (!properties.publishEnabled()) {
+            log.debug("Matching publish disabled; skipping pago emitida publication");
+            return PublishResult.skipped("Publishing disabled by configuration");
+        }
+
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("idCorrelacion", idCorrelacion);
+        cuerpo.put("idUsuario", idUsuario);
+        cuerpo.put("idPrestador", idPrestador);
+        cuerpo.put("idSolicitud", idSolicitud);
+        cuerpo.put("montoSubtotal", montoSubtotal);
+        cuerpo.put("impuestos", impuestos);
+        cuerpo.put("comisiones", comisiones);
+        cuerpo.put("moneda", moneda);
+        cuerpo.put("metodoPreferido", metodoPreferido);
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("squad", "Matching y Agenda");
+        payload.put("topico", "Pago");
+        payload.put("evento", "Solicitud Pago Emitida");
+        payload.put("cuerpo", cuerpo);
+
+        PublishMessage message = new PublishMessage(
+                UUID.randomUUID().toString(),
+                Instant.now().toString(),
+                properties.publishSource(),
+                new Destination(properties.publishPagoChannel(), properties.publishPagoEventName()),
+                payload
+        );
+
+        try {
+            ResponseEntity<Void> response = matchingRestClient.post()
+                    .uri(properties.publishPath())
+                    .body(message)
+                    .retrieve()
+                    .toBodilessEntity();
+            HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
+            log.info("Publicado evento Pago Emitida messageId={} status={}", message.messageId(), status);
+            return PublishResult.success(message.messageId(), status);
+        } catch (RestClientResponseException e) {
+            HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
+            log.error("Error publicando Pago Emitida messageId={} status={} body={}",
+                    message.messageId(), status, e.getResponseBodyAsString());
+            return PublishResult.failure(message.messageId(), status, e.getResponseBodyAsString());
+        } catch (RestClientException e) {
+            log.error("Error publicando Pago Emitida messageId={}", message.messageId(), e);
+            return PublishResult.failure(message.messageId(), HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
 }

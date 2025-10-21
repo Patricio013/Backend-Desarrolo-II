@@ -8,6 +8,7 @@ import com.example.demo.entity.Notificaciones;
 import com.example.demo.entity.SolicitudPago;
 import com.example.demo.entity.enums.EstadoSolicitudPago;
 import com.example.demo.repository.SolicitudPagoRepository;
+import com.example.demo.repository.SolicitudRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,8 @@ public class SolicitudPagoService {
 
     private final SolicitudPagoRepository repo;
     private final PagosClient pagosClient;
+    private final MatchingPublisherService matchingPublisherService;
+    private final SolicitudRepository solicitudRepository;
     private final NotificacionesService notificacionesService; // ya lo tenés
 
     @Transactional
@@ -68,6 +71,30 @@ public class SolicitudPagoService {
                         .leida(false)
                         .build()
         );
+
+        // Publicar evento para Pagos: "Solicitud Pago Emitida"
+        try {
+            Long idUsuario = null;
+            if (sp.getSolicitudId() != null) {
+                idUsuario = solicitudRepository.findByExternalId(sp.getSolicitudId())
+                        .map(s -> s.getUsuarioId())
+                        .orElse(null);
+            }
+            String idCorrelacion = "PED-" + (sp.getId() != null ? sp.getId() : "");
+            matchingPublisherService.publishSolicitudPagoEmitida(
+                    idCorrelacion,
+                    idUsuario,
+                    sp.getPrestadorId(),
+                    sp.getSolicitudId(),
+                    sp.getMonto(),
+                    java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO,
+                    "ARS",
+                    "MERCADO_PAGO"
+            );
+        } catch (Exception e) {
+            // Do not interrupt payment creation if publishing fails
+        }
 
         return toDTO(sp);
     }
