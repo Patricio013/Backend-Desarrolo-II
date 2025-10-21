@@ -1,7 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.PrestadorDTO;
-import com.example.demo.response.ModuleResponse;
+import com.example.demo.dto.ModuleResponse;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.PrestadorSyncService;
 import org.junit.jupiter.api.BeforeEach;
