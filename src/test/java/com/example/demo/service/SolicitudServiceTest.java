@@ -1,8 +1,8 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.*;
-import com.example.demo.enums.EstadoSolicitud;
-import com.example.demo.model.*;
+import com.example.demo.entity.enums.EstadoSolicitud;
+import com.example.demo.entity.*;
 import com.example.demo.repository.*;
 
 import org.junit.jupiter.api.BeforeEach;
