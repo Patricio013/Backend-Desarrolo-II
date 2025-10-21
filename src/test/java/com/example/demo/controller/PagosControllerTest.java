@@ -2,89 +2,118 @@ package com.example.demo.controller;
 
 import com.example.demo.dto.SolicitudPagoCreateDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
-import com.example.demo.entity.SolicitudPago;
-import com.example.demo.repository.SolicitudPagoRepository;
+import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.SolicitudPagoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.*;
+import org.springframework.http.ResponseEntity;
 
-import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
 class PagosControllerTest {
 
     @Mock
-    private SolicitudPagoService service;
+    private SolicitudPagoService solicitudPagoService;
 
     @Mock
-    private SolicitudPagoRepository repo;
+    private ModuleResponseFactory responseFactory;
 
     @InjectMocks
     private PagosController controller;
 
     @BeforeEach
-    void setUp() {
+    void setup() {
         MockitoAnnotations.openMocks(this);
     }
 
     @Test
-    void crearPago_ok() {
-        SolicitudPagoCreateDTO input = new SolicitudPagoCreateDTO();
-        SolicitudPagoDTO output = new SolicitudPagoDTO();
-        output.setId(1L);
+    void crearSolicitudPago_deberiaRetornarOk() {
+        // Arrange
+        SolicitudPagoCreateDTO dto = new SolicitudPagoCreateDTO();
+        dto.setIdSolicitud(1L);
+        dto.setMonto(1500.0);
 
-        when(service.crearYEnviar(input)).thenReturn(output);
+        SolicitudPagoDTO mockResponse = new SolicitudPagoDTO();
+        mockResponse.setId(10L);
 
-        SolicitudPagoDTO result = controller.crear(input);
+        when(solicitudPagoService.crearSolicitudPago(dto)).thenReturn(mockResponse);
 
-        assertNotNull(result);
-        assertEquals(1L, result.getId());
-        verify(service).crearYEnviar(input);
+        // Act
+        ResponseEntity<SolicitudPagoDTO> response = controller.crearSolicitudPago(dto);
+
+        // Assert
+        verify(solicitudPagoService).crearSolicitudPago(dto);
+        assertThat(response.getBody()).isEqualTo(mockResponse);
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 
     @Test
-    void ultimasPagos_ok() {
-        SolicitudPagoDTO dto = new SolicitudPagoDTO();
-        dto.setId(1L);
-        var entity = new SolicitudPago();
-        entity.setId(1L);
-        entity.setCreatedAt(LocalDateTime.now());
+    void listarPagosPorPrestador_devuelveListaPagos() {
+        // Arrange
+        Long idPrestador = 7L;
 
-        when(repo.findTop50ByOrderByCreatedAtDesc()).thenReturn(List.of(entity));
-        when(service.toDTO(entity)).thenReturn(dto);
+        SolicitudPagoDTO pago1 = new SolicitudPagoDTO();
+        pago1.setId(1L);
+        SolicitudPagoDTO pago2 = new SolicitudPagoDTO();
+        pago2.setId(2L);
 
-        List<SolicitudPagoDTO> result = controller.ultimas();
+        when(solicitudPagoService.listarPagosPorPrestador(idPrestador))
+                .thenReturn(List.of(pago1, pago2));
 
-        assertEquals(1, result.size());
-        assertEquals(1L, result.get(0).getId());
+        // Act
+        ResponseEntity<List<SolicitudPagoDTO>> response = controller.listarPagosPorPrestador(idPrestador);
+
+        // Assert
+        verify(solicitudPagoService).listarPagosPorPrestador(idPrestador);
+        assertThat(response.getBody()).hasSize(2);
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 
     @Test
-    void getPago_ok() {
-        var entity = new SolicitudPago();
-        entity.setId(10L);
-        SolicitudPagoDTO dto = new SolicitudPagoDTO();
-        dto.setId(10L);
+    void confirmarPago_deberiaRetornarOk() {
+        // Arrange
+        Long idPago = 5L;
+        when(solicitudPagoService.confirmarPago(idPago)).thenReturn(true);
 
-        when(repo.findById(10L)).thenReturn(Optional.of(entity));
-        when(service.toDTO(entity)).thenReturn(dto);
+        // Act
+        ResponseEntity<Boolean> response = controller.confirmarPago(idPago);
 
-        SolicitudPagoDTO result = controller.get(10L);
-
-        assertNotNull(result);
-        assertEquals(10L, result.getId());
+        // Assert
+        verify(solicitudPagoService).confirmarPago(idPago);
+        assertThat(response.getBody()).isTrue();
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 
     @Test
-    void getPago_notFound() {
-        when(repo.findById(99L)).thenReturn(Optional.empty());
-        assertThrows(RuntimeException.class, () -> controller.get(99L));
+    void confirmarPago_devuelveFalseCuandoFalla() {
+        // Arrange
+        Long idPago = 9L;
+        when(solicitudPagoService.confirmarPago(idPago)).thenReturn(false);
+
+        // Act
+        ResponseEntity<Boolean> response = controller.confirmarPago(idPago);
+
+        // Assert
+        verify(solicitudPagoService).confirmarPago(idPago);
+        assertThat(response.getBody()).isFalse();
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
+    }
+
+    @Test
+    void eliminarPago_deberiaInvocarServiceYRetornarOk() {
+        // Arrange
+        Long idPago = 15L;
+        doNothing().when(solicitudPagoService).eliminarPago(idPago);
+
+        // Act
+        ResponseEntity<Void> response = controller.eliminarPago(idPago);
+
+        // Assert
+        verify(solicitudPagoService).eliminarPago(idPago);
+        assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 }
