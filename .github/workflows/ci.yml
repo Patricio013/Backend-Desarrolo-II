@@ -516,12 +516,6 @@ jobs:
             # Re-usar la misma lógica de parseo del step 'Resumen Cypress'
             echo "$clean_log" | grep -E "✔|✖" | awk '{ if ($2 != "All") printf "| %s | %s | %s | %s |\n", $2, $3, $4, $5 }' >> metrics/cypress_summary.md
             echo "" >> metrics/cypress_summary.md
-
-            # Opcional: Agregar el resumen final de texto
-            echo "### Resumen Final" >> metrics/cypress_summary.md
-            echo '```' >> metrics/cypress_summary.md
-            echo "$clean_log" | awk '/Running:/,0' | tail -n 10 >> metrics/cypress_summary.md
-            echo '```' >> metrics/cypress_summary.md
           fi
 
           # Agregar metadatos del commit y rama
