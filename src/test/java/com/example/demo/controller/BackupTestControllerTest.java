@@ -1,6 +1,5 @@
 package com.example.demo.controller;
 
-import com.example.demo.service.BackupTestService;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,8 +18,6 @@ class BackupTestControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
-    @MockBean
-    private BackupTestService backupTestService;
 
     @Test
     void testGenerarBackup_Success() throws Exception {
