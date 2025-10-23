@@ -2,7 +2,6 @@ package com.example.demo.controller;
 
 import com.example.demo.entity.Solicitud;
 import com.example.demo.dto.SolicitudPagoDTO;
-import com.example.demo.dto.SolicitudTop3Resultado;
 import com.example.demo.service.CotizacionService;
 import com.example.demo.service.SolicitudService;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,17 +35,6 @@ public class SolicitudControllerTest {
         MockitoAnnotations.openMocks(this);
     }
 
-    @Test
-    void testInvitarTop3() {
-        List<SolicitudTop3Resultado> mockResult = List.of(new SolicitudTop3Resultado());
-        when(solicitudService.procesarTodasLasCreadas()).thenReturn(mockResult);
-
-        ResponseEntity<List<SolicitudTop3Resultado>> response = solicitudController.invitarTop3();
-
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals(mockResult, response.getBody());
-        verify(solicitudService, times(1)).procesarTodasLasCreadas();
-    }
 
     @Test
     void testCrearDesdeEventos() {

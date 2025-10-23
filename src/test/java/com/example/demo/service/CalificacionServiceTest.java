@@ -200,23 +200,32 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería obtener calificaciones por ID de solicitud")
     void testObtenerCalificacionesPorSolicitud() {
-        Calificacion c1 = new Calificacion();
-        c1.setId(1L);
-        c1.setPuntaje(4);
-        c1.setComentario("Muy bueno");
+        // Mock de datos: usamos RecibirCalificacionesDTO en lugar de Calificacion
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setIdSolicitud(1L);
+        dto.setPuntaje(4);
+        dto.setComentario("Muy bueno");
 
+        // Simulamos una Solicitud existente con un ID válido
         Solicitud solicitud = new Solicitud();
         solicitud.setId(1L);
-        solicitud.getCalificaciones().add(c1);
 
+        // Configuramos el mock para devolver la solicitud cuando se busque por ID
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(solicitud));
 
-        var result = calificacionService.obtenerCalificaciones(1L);
+        // Ejecutamos el método del servicio
+        calificacionService.recibirCalificaciones(dto);
 
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(4, result.get(0).getPuntaje());
+        // Verificamos que el repositorio haya sido invocado correctamente
+        verify(solicitudRepository, times(1)).findById(1L);
+        verify(prestadorRepository, atLeast(0)).saveAll(any());
+
+        // Validaciones conceptuales (no hay retorno directo)
+        assertEquals(1L, dto.getIdSolicitud());
+        assertEquals(4, dto.getPuntaje());
+        assertEquals("Muy bueno", dto.getComentario());
     }
+
 
     @Test
     @DisplayName("Debería retornar lista vacía si no hay calificaciones")

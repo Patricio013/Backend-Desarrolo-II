@@ -1,16 +1,17 @@
 package com.example.demo.service;
 
 import com.example.demo.dto.*;
-import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.entity.*;
+import com.example.demo.enums.EstadoSolicitud;
 import com.example.demo.repository.*;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.*;
 
@@ -18,9 +19,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Pruebas unitarias para SolicitudService
+ * ✅ Pruebas unitarias para SolicitudService
  * Cubre creación, cotizaciones, invitaciones, asignación y estados.
  */
+@ExtendWith(MockitoExtension.class)
 class SolicitudServiceTest {
 
     @Mock private SolicitudRepository solicitudRepository;
@@ -38,8 +40,6 @@ class SolicitudServiceTest {
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-
         cliente = new Usuario();
         cliente.setId(1L);
         cliente.setNombre("Juan");
