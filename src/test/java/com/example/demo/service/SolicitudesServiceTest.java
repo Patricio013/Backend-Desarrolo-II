@@ -26,7 +26,7 @@ class SolicitudesServiceTest {
 
     // TODO: inyecta tu service real
     @org.springframework.beans.factory.annotation.Autowired
-    private SolicitudesService solicitudesService;
+    private SolicitudService solicitudService;
 
     private Solicitud stub;
 
@@ -47,7 +47,7 @@ class SolicitudesServiceTest {
             return s;
         });
 
-        var result = solicitudesService.crear(stub); // TODO: método real del service
+        var result = solicitudService.crearSolicitud(stub.getUsuario().getId(), stub.getDescripcion()); // TODO: método real del service
 
         assertThat(result).isNotNull();
         verify(solicitudRepository, times(1)).save(any(Solicitud.class));
@@ -62,7 +62,7 @@ class SolicitudesServiceTest {
     @Test
     void obtenerPorId_ok() {
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(stub));
-        var found = solicitudesService.obtenerPorId(1L); // TODO: método real
+        var found = solicitudService.obtenerPorId(1L); // TODO: método real
         assertThat(found).isPresent();
     }
 }
