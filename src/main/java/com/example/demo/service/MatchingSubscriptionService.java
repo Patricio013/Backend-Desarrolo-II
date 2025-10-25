@@ -44,7 +44,7 @@ public class MatchingSubscriptionService {
         }
         String safeTopic = topic.trim();
         String safeEvent = eventName.trim();
-        SubscriptionRequest body = new SubscriptionRequest(webhookUrl, teamName, safeTopic, safeEvent);
+        SubscriptionRequest body = new SubscriptionRequest(webhookUrl, teamName, safeTopic, safeEvent, true);
         try {
             log.info("Enviando suscripción Matching topic={} eventName={} webhookUrl={} squadName={} apiKey={}",
                     safeTopic,
@@ -81,10 +81,9 @@ public class MatchingSubscriptionService {
         if (targetTeamName == null || domain == null || action == null) {
             throw new IllegalArgumentException("targetTeamName, domain and action must be provided");
         }
-        String normalizedTeam = targetTeamName.trim();
         String normalizedDomain = domain.trim();
         String normalizedAction = action.trim();
-        String topic = String.join(".", normalizedTeam, normalizedDomain, normalizedAction);
+        String topic = normalizedDomain;
         String normalizedEventName = (eventName != null && !eventName.isBlank())
                 ? eventName.trim()
                 : normalizedAction;
@@ -175,7 +174,8 @@ public class MatchingSubscriptionService {
             String webhookUrl,
             String squadName,
             String topic,
-            String eventName
+            String eventName,
+            boolean ack
     ) {
     }
 

@@ -48,8 +48,8 @@ public class MatchingPublisherService {
                     .retrieve()
                     .toBodilessEntity();
             HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
-            log.info("Publicado top3 en Matching messageId={} status={} channel={} event={}",
-                    message.messageId(), status, message.destination().channel(), message.destination().eventName());
+            log.info("Publicado top3 en Matching messageId={} status={} topic={} event={}",
+                    message.messageId(), status, message.destination().topic(), message.destination().eventName());
             return PublishResult.success(message.messageId(), status);
         } catch (RestClientResponseException e) {
             HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
@@ -73,7 +73,6 @@ public class MatchingPublisherService {
         return new PublishMessage(
                 UUID.randomUUID().toString(),
                 Instant.now().toString(),
-                properties.publishSource(),
                 new Destination(properties.publishTop3Channel(), properties.publishTop3EventName()),
                 payload
         );
@@ -99,8 +98,8 @@ public class MatchingPublisherService {
                     .retrieve()
                     .toBodilessEntity();
             HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
-            log.info("Publicado resumen de cotizaciones messageId={} status={} channel={} event={}",
-                    message.messageId(), status, message.destination().channel(), message.destination().eventName());
+            log.info("Publicado resumen de cotizaciones messageId={} status={} topic={} event={}",
+                    message.messageId(), status, message.destination().topic(), message.destination().eventName());
             return PublishResult.success(message.messageId(), status);
         } catch (RestClientResponseException e) {
             HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
@@ -134,7 +133,7 @@ public class MatchingPublisherService {
         out.put("prestadorNombre", invitacion.getPrestadorNombre());
         out.put("mensaje", invitacion.getMensaje());
         out.put("enviado", invitacion.isEnviado());
-        out.put("timestamp", invitacion.getTimestamp());
+        out.put("timestamp", invitacion.getTimestamp() != null ? invitacion.getTimestamp().toString() : null);
         out.put("habilidadId", invitacion.getHabilidadId());
         out.put("rubroId", invitacion.getRubroId());
         out.put("cotizacionId", invitacion.getCotizacionId());
@@ -152,7 +151,6 @@ public class MatchingPublisherService {
         return new PublishMessage(
                 UUID.randomUUID().toString(),
                 Instant.now().toString(),
-                properties.publishSource(),
                 new Destination(properties.publishCotizacionesChannel(), properties.publishCotizacionesEventName()),
                 payload
         );
@@ -188,13 +186,12 @@ public class MatchingPublisherService {
     private record PublishMessage(
             String messageId,
             String timestamp,
-            String source,
             Destination destination,
             Map<String, Object> payload
     ) {
     }
 
-    private record Destination(String channel, String eventName) {
+    private record Destination(String topic, String eventName) {
     }
 
     public record PublishResult(String messageId, boolean success, HttpStatus status, String errorMessage) {
@@ -228,27 +225,24 @@ public class MatchingPublisherService {
             return PublishResult.skipped("Publishing disabled by configuration");
         }
 
-        Map<String, Object> cuerpo = new LinkedHashMap<>();
-        cuerpo.put("idCorrelacion", idCorrelacion);
-        cuerpo.put("idUsuario", idUsuario);
-        cuerpo.put("idPrestador", idPrestador);
-        cuerpo.put("idSolicitud", idSolicitud);
-        cuerpo.put("montoSubtotal", montoSubtotal);
-        cuerpo.put("impuestos", impuestos);
-        cuerpo.put("comisiones", comisiones);
-        cuerpo.put("moneda", moneda);
-        cuerpo.put("metodoPreferido", metodoPreferido);
+        Map<String, Object> pago = new LinkedHashMap<>();
+        pago.put("idCorrelacion", idCorrelacion);
+        pago.put("idUsuario", idUsuario);
+        pago.put("idPrestador", idPrestador);
+        pago.put("idSolicitud", idSolicitud);
+        pago.put("montoSubtotal", montoSubtotal);
+        pago.put("impuestos", impuestos);
+        pago.put("comisiones", comisiones);
+        pago.put("moneda", moneda);
+        pago.put("metodoPreferido", metodoPreferido);
 
         Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("squad", "Matching y Agenda");
-        payload.put("topico", "Pago");
-        payload.put("evento", "Solicitud Pago Emitida");
-        payload.put("cuerpo", cuerpo);
+        payload.put("generatedAt", Instant.now().toString());
+        payload.put("pago", pago);
 
         PublishMessage message = new PublishMessage(
                 UUID.randomUUID().toString(),
                 Instant.now().toString(),
-                properties.publishSource(),
                 new Destination(properties.publishPagoChannel(), properties.publishPagoEventName()),
                 payload
         );
