@@ -1,5 +1,6 @@
 package com.example.demo.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.util.Collections;
@@ -7,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
+@Slf4j
 @ConfigurationProperties(prefix = "integrations.matching")
 public record MatchingIntegrationProperties(
         String baseUrl,
@@ -47,11 +49,15 @@ public record MatchingIntegrationProperties(
 
         if (autoSubscribeEnabled) {
             if (autoSubscriptions == null || autoSubscriptions.isEmpty()) {
-                throw new IllegalStateException("At least one auto subscription must be configured when integrations.matching.auto-subscribe-enabled=true");
+                log.warn("Matching auto-subscribe enabled but no targets configured; startup auto-enroll will be skipped");
+                autoSubscribeEnabled = false;
+                autoSubscriptions = Collections.emptyList();
+            } else {
+                autoSubscriptions = normalize(autoSubscriptions);
             }
+        } else {
+            autoSubscriptions = Collections.emptyList();
         }
-
-        autoSubscriptions = normalize(autoSubscriptions);
 
         if (publishPath == null || publishPath.isBlank()) {
             publishPath = "/publish";

@@ -3,21 +3,16 @@ package com.example.demo.controller;
 import com.example.demo.dto.CotizacionWebhookDTO;
 import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.ModuleResponse;
-import com.example.demo.dto.PrestadorAltaWebhookDTO;
-import com.example.demo.dto.PrestadorDTO;
 import com.example.demo.dto.HabilidadAltaWebhookDTO;
 import com.example.demo.dto.RubroAltaWebhookDTO;
 import com.example.demo.dto.RubroModificacionWebhookDTO;
 import com.example.demo.dto.ZonaAltaWebhookDTO;
 import com.example.demo.dto.ZonaModificacionWebhookDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
-import com.example.demo.entity.Habilidad;
-import com.example.demo.entity.Rubro;
 import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.CotizacionService;
 import com.example.demo.service.MatchingSubscriptionService;
-import com.example.demo.service.PrestadorSyncService;
 import com.example.demo.service.RubroSyncService;
 import com.example.demo.service.ZonaSyncService;
 import com.example.demo.service.SolicitudService;
@@ -50,7 +45,6 @@ public class WebhookTestController {
     private final WebhookEventService webhookEventService;
     private final SolicitudService solicitudService;
     private final CotizacionService cotizacionService;
-    private final PrestadorSyncService prestadorSyncService;
     private final RubroSyncService rubroSyncService;
     private final ZonaSyncService zonaSyncService;
     private final HabilidadSyncService habilidadSyncService;
@@ -89,8 +83,11 @@ public class WebhookTestController {
             String topic = firstNonNull(
                     extractString(safePayload, "topic"),
                     firstNonNull(
-                        extractString(safePayload, "topico"),
-                        extractNestedString(safePayload, "destination", "channel")
+                            extractString(safePayload, "topico"),
+                            firstNonNull(
+                                    extractNestedString(safePayload, "destination", "topic"),
+                                    extractNestedString(safePayload, "destination", "channel")
+                            )
                     )
             );
             String eventName = firstNonNull(
@@ -129,15 +126,6 @@ public class WebhookTestController {
             boolean cotizacionRecibida = false;
             Map<String, Object> cotizacionRecibidaDetails = null;
             List<String> cotizacionRecibidaWarnings = new ArrayList<>();
-            boolean prestadorProcesado = false;
-            Long prestadorIdProcesado = null;
-            List<String> prestadorWarnings = new ArrayList<>();
-            boolean prestadorModificado = false;
-            Long prestadorIdModificado = null;
-            List<String> prestadorModWarnings = new ArrayList<>();
-            boolean prestadorBajaProcesado = false;
-            Long prestadorBajaId = null;
-            List<String> prestadorBajaWarnings = new ArrayList<>();
             boolean rubroProcesado = false;
             Long rubroIdProcesado = null;
             List<String> rubroWarnings = new ArrayList<>();
@@ -177,8 +165,7 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && eventName != null
-                    && eventName.equalsIgnoreCase("solicitud.cancelada")) {
+                    && eventMatches(eventName, "solicitud", "cancelada", "solicitud.cancelada")) {
                 // TODO(suscripciones): ajustar filtros/topic definitivos cuando esté definido el canal real
                 Long solicitudId = extractLong(payloadSection, "solicitud_id");
                 if (solicitudId == null) {
@@ -235,53 +222,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.prestador.alta")
-                    && "alta_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
-                try {
-                    PrestadorAltaWebhookDTO prestadorAlta = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
-                    PrestadorDTO prestadorDTO = buildPrestadorDtoFromAlta(prestadorAlta, prestadorWarnings);
-                    prestadorSyncService.upsertDesdeDTO(prestadorDTO);
-                    prestadorProcesado = true;
-                    prestadorIdProcesado = prestadorDTO.getId();
-                } catch (IllegalArgumentException e) {
-                    prestadorWarnings.add(e.getMessage());
-                    log.warn("Payload de alta de prestador inválido: {}", e.getMessage());
-                } catch (Exception e) {
-                    prestadorWarnings.add("Error procesando alta de prestador: " + e.getMessage());
-                    log.error("Error procesando alta de prestador desde webhook", e);
-                }
-            }
-
-            if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.prestador.modificacion")
-                    && "modificacion_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
-                // TODO(suscripciones): ajustar filtros definitivos para modificación de prestador
-                try {
-                    PrestadorAltaWebhookDTO prestadorMod = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
-                    if (prestadorMod.getId() == null) {
-                        prestadorModWarnings.add("payload.id ausente en modificacion de prestador");
-                        log.warn("Modificación de prestador sin id: {}", payloadSection);
-                    } else {
-                        PrestadorDTO dto = buildPrestadorDtoFromAlta(prestadorMod, prestadorModWarnings);
-                        prestadorSyncService.upsertDesdeDTO(dto);
-                        prestadorModificado = true;
-                        prestadorIdModificado = dto.getId();
-                    }
-                } catch (IllegalArgumentException e) {
-                    prestadorModWarnings.add(e.getMessage());
-                    log.warn("Payload de modificacion de prestador inválido: {}", e.getMessage());
-                } catch (Exception e) {
-                    prestadorModWarnings.add("Error procesando modificacion de prestador: " + e.getMessage());
-                    log.error("Error procesando modificacion de prestador desde webhook", e);
-                }
-            }
-
-            if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.pedidos.cotizacion_enviada")
-                    && "cotizacion_enviada".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "pedido", "pedidos", "catalogue.pedidos.cotizacion_enviada", "matching.pedidos.cotizacion_enviada")
+                    && eventMatches(eventName, "pedido", "cotizacion_enviada")) {
                 try {
                     CotizacionWebhookDTO cotizacionDto = objectMapper.convertValue(payloadSection, CotizacionWebhookDTO.class);
                     if (cotizacionDto.getIdPedido() == null) {
@@ -318,34 +260,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.prestador.baja")
-                    && "baja_prestador".equalsIgnoreCase(firstNonNull(eventName, ""))) {
-                // TODO(suscripciones): ajustar filtros definitivos para baja de prestador
-                try {
-                    PrestadorAltaWebhookDTO prestadorBaja = objectMapper.convertValue(payloadSection, PrestadorAltaWebhookDTO.class);
-                    if (prestadorBaja.getId() == null) {
-                        prestadorBajaWarnings.add("payload.id ausente en baja de prestador");
-                        log.warn("Baja de prestador sin id: {}", payloadSection);
-                    } else {
-                        PrestadorDTO prestadorDTO = buildPrestadorDtoFromAlta(prestadorBaja, prestadorBajaWarnings);
-                        prestadorSyncService.upsertDesdeDTO(prestadorDTO);
-                        prestadorBajaProcesado = true;
-                        prestadorBajaId = prestadorDTO.getId();
-                    }
-                } catch (IllegalArgumentException e) {
-                    prestadorBajaWarnings.add(e.getMessage());
-                    log.warn("Payload de baja de prestador inválido: {}", e.getMessage());
-                } catch (Exception e) {
-                    prestadorBajaWarnings.add("Error procesando baja de prestador: " + e.getMessage());
-                    log.error("Error procesando baja de prestador desde webhook", e);
-                }
-            }
-
-            if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.habilidad.alta")
-                    && "alta_habilidad".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "habilidad", "catalogue.habilidad.alta", "matching.habilidad.alta")
+                    && eventMatches(eventName, "habilidad", "alta")) {
                 // TODO(suscripciones): revisar canal/evento definitivo para alta de habilidades
                 try {
                     HabilidadAltaWebhookDTO habilidadAlta = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
@@ -370,10 +286,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.habilidad.modificacion")
-                    && ("modificacion_habilidad".equalsIgnoreCase(firstNonNull(eventName, ""))
-                        || "alta_modificacion".equalsIgnoreCase(firstNonNull(eventName, "")))) {
+                    && topicMatches(topic, "habilidad", "catalogue.habilidad.modificacion", "matching.habilidad.modificacion")
+                    && eventMatches(eventName, "habilidad", "modificacion", "alta_modificacion")) {
                 // TODO(suscripciones): revisar canal/evento definitivo para modificación de habilidades
                 try {
                     HabilidadAltaWebhookDTO habilidadMod = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
@@ -398,9 +312,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.rubro.alta")
-                    && "alta_rubro".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "rubro", "catalogue.rubro.alta", "matching.rubro.alta")
+                    && eventMatches(eventName, "rubro", "alta")) {
                 try {
                     RubroAltaWebhookDTO rubroAlta = objectMapper.convertValue(payloadSection, RubroAltaWebhookDTO.class);
                     rubroSyncService.upsertDesdeDTO(rubroAlta);
@@ -416,9 +329,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.rubro.modificacion")
-                    && "modificacion_rubro".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "rubro", "catalogue.rubro.modificacion", "matching.rubro.modificacion")
+                    && eventMatches(eventName, "rubro", "modificacion")) {
                 try {
                     RubroModificacionWebhookDTO rubroModificacion = objectMapper.convertValue(payloadSection, RubroModificacionWebhookDTO.class);
                     rubroSyncService.actualizarDesdeDTO(rubroModificacion);
@@ -434,9 +346,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.zona.alta")
-                    && "alta_zona".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "zona", "catalogue.zona.alta", "matching.zona.alta")
+                    && eventMatches(eventName, "zona", "alta")) {
                 try {
                     ZonaAltaWebhookDTO zonaAlta = objectMapper.convertValue(payloadSection, ZonaAltaWebhookDTO.class);
                     zonaSyncService.upsertDesdeDTO(zonaAlta);
@@ -452,9 +363,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && topic != null
-                    && topic.equalsIgnoreCase("catalogue.zona.modificacion")
-                    && "modificacion_zona".equalsIgnoreCase(firstNonNull(eventName, ""))) {
+                    && topicMatches(topic, "zona", "catalogue.zona.modificacion", "matching.zona.modificacion")
+                    && eventMatches(eventName, "zona", "modificacion")) {
                 try {
                     ZonaModificacionWebhookDTO zonaModificacion = objectMapper.convertValue(payloadSection, ZonaModificacionWebhookDTO.class);
                     zonaSyncService.actualizarDesdeDTO(zonaModificacion);
@@ -523,27 +433,6 @@ public class WebhookTestController {
             }
             if (!habilidadModWarnings.isEmpty()) {
                 storedPayload.put("habilidadModWarnings", habilidadModWarnings);
-            }
-            storedPayload.put("prestadorProcesado", prestadorProcesado);
-            if (prestadorIdProcesado != null) {
-                storedPayload.put("prestadorId", prestadorIdProcesado);
-            }
-            if (!prestadorWarnings.isEmpty()) {
-                storedPayload.put("prestadorWarnings", prestadorWarnings);
-            }
-            storedPayload.put("prestadorModificado", prestadorModificado);
-            if (prestadorIdModificado != null) {
-                storedPayload.put("prestadorIdModificado", prestadorIdModificado);
-            }
-            if (!prestadorModWarnings.isEmpty()) {
-                storedPayload.put("prestadorModWarnings", prestadorModWarnings);
-            }
-            storedPayload.put("prestadorBajaProcesado", prestadorBajaProcesado);
-            if (prestadorBajaId != null) {
-                storedPayload.put("prestadorBajaId", prestadorBajaId);
-            }
-            if (!prestadorBajaWarnings.isEmpty()) {
-                storedPayload.put("prestadorBajaWarnings", prestadorBajaWarnings);
             }
             storedPayload.put("rubroProcesado", rubroProcesado);
             if (rubroIdProcesado != null) {
@@ -621,27 +510,6 @@ public class WebhookTestController {
             }
             if (!habilidadModWarnings.isEmpty()) {
                 responsePayload.put("habilidadModWarnings", habilidadModWarnings);
-            }
-            responsePayload.put("prestadorProcesado", prestadorProcesado);
-            if (prestadorIdProcesado != null) {
-                responsePayload.put("prestadorId", prestadorIdProcesado);
-            }
-            if (!prestadorWarnings.isEmpty()) {
-                responsePayload.put("prestadorWarnings", prestadorWarnings);
-            }
-            responsePayload.put("prestadorModificado", prestadorModificado);
-            if (prestadorIdModificado != null) {
-                responsePayload.put("prestadorIdModificado", prestadorIdModificado);
-            }
-            if (!prestadorModWarnings.isEmpty()) {
-                responsePayload.put("prestadorModWarnings", prestadorModWarnings);
-            }
-            responsePayload.put("prestadorBajaProcesado", prestadorBajaProcesado);
-            if (prestadorBajaId != null) {
-                responsePayload.put("prestadorBajaId", prestadorBajaId);
-            }
-            if (!prestadorBajaWarnings.isEmpty()) {
-                responsePayload.put("prestadorBajaWarnings", prestadorBajaWarnings);
             }
             responsePayload.put("rubroProcesado", rubroProcesado);
             if (rubroIdProcesado != null) {
@@ -852,144 +720,115 @@ public class WebhookTestController {
         return errorPayload;
     }
 
+    private boolean topicMatches(String topic, String... candidates) {
+        if (topic == null || topic.isBlank()) {
+            return false;
+        }
+        String normalized = normalizeTopicDomain(topic);
+        for (String candidate : candidates) {
+            if (candidate == null || candidate.isBlank()) {
+                continue;
+            }
+            if (topic.equalsIgnoreCase(candidate)) {
+                return true;
+            }
+            if (!candidate.contains(".") && normalized != null && normalized.equalsIgnoreCase(candidate)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String normalizeTopicDomain(String topic) {
+        if (topic == null) {
+            return null;
+        }
+        String trimmed = topic.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        String[] parts = trimmed.split("\\.");
+        if (parts.length == 0) {
+            return null;
+        }
+        if (parts.length == 1) {
+            return parts[0];
+        }
+        if (parts.length >= 3) {
+            return parts[parts.length - 2];
+        }
+        return parts[parts.length - 1];
+    }
+
+    private boolean eventMatches(String eventName, String domain, String... expected) {
+        if (expected == null || expected.length == 0) {
+            return true;
+        }
+        String normalized = normalizeEventName(eventName);
+        for (String candidate : expected) {
+            if (candidate == null || candidate.isBlank()) {
+                continue;
+            }
+            if (eventName != null && eventName.equalsIgnoreCase(candidate)) {
+                return true;
+            }
+            if (normalized != null && normalized.equalsIgnoreCase(candidate)) {
+                return true;
+            }
+            if (eventName != null) {
+                if (domain != null && eventName.equalsIgnoreCase(candidate + "_" + domain)) {
+                    return true;
+                }
+                if (domain != null && eventName.equalsIgnoreCase(domain + "." + candidate)) {
+                    return true;
+                }
+                if (domain != null && eventName.equalsIgnoreCase(domain + "_" + candidate)) {
+                    return true;
+                }
+                if (eventName.contains("_")) {
+                    for (String part : eventName.split("_")) {
+                        if (part.equalsIgnoreCase(candidate)) {
+                            return true;
+                        }
+                    }
+                }
+                if (eventName.contains(".")) {
+                    for (String part : eventName.split("\\.")) {
+                        if (part.equalsIgnoreCase(candidate)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private String normalizeEventName(String eventName) {
+        if (eventName == null) {
+            return null;
+        }
+        String trimmed = eventName.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int lastSlash = trimmed.lastIndexOf('/');
+        if (lastSlash >= 0 && lastSlash < trimmed.length() - 1) {
+            trimmed = trimmed.substring(lastSlash + 1);
+        }
+        int lastDot = trimmed.lastIndexOf('.');
+        if (lastDot >= 0 && lastDot < trimmed.length() - 1) {
+            trimmed = trimmed.substring(lastDot + 1);
+        }
+        int firstUnderscore = trimmed.indexOf('_');
+        if (firstUnderscore >= 0) {
+            trimmed = trimmed.substring(0, firstUnderscore);
+        }
+        return trimmed;
+    }
+
     private String firstNonNull(String a, String b) {
         return a != null ? a : b;
-    }
-
-    private PrestadorDTO buildPrestadorDtoFromAlta(PrestadorAltaWebhookDTO evento, List<String> warnings) {
-        if (evento == null) {
-            throw new IllegalArgumentException("payload vacío para alta de prestador");
-        }
-        if (evento.getId() == null) {
-            throw new IllegalArgumentException("payload.id requerido para alta de prestador");
-        }
-
-        String nombre = sanitizeOrFallback(evento.getNombre(), "nombre", warnings, "Sin nombre");
-        String apellido = sanitizeOrFallback(evento.getApellido(), "apellido", warnings, "Sin apellido");
-        String email = sanitizeOrFallback(
-                evento.getEmail(),
-                "email",
-                warnings,
-                "sin-email-" + evento.getId() + "@desconocido.local"
-        );
-        String telefono = sanitizeOrFallback(evento.getTelefono(), "telefono", warnings, "-");
-        String direccion = buildDireccion(evento, warnings);
-        String estado = (evento.getActivo() != null && evento.getActivo() == 1) ? "ACTIVO" : "INACTIVO";
-        if (evento.getActivo() == null) {
-            warnings.add("payload.activo ausente, se asumió estado INACTIVO");
-        }
-        warnings.add("payload.precioHora ausente, se utilizó 0.0");
-
-        Long zonaId = extractZonaId(evento, warnings);
-        List<Habilidad> habilidades = buildHabilidadesFromEvento(evento, warnings);
-
-        return PrestadorDTO.builder()
-                .id(evento.getId())
-                .nombre(nombre)
-                .apellido(apellido)
-                .email(email)
-                .telefono(telefono)
-                .direccion(direccion)
-                .estado(estado)
-                .precioHora(0.0)
-                .zonaId(zonaId)
-                .habilidades(habilidades)
-                .calificacion(List.of())
-                .trabajosFinalizados(0)
-                .build();
-    }
-
-    private String sanitizeOrFallback(String value, String fieldName, List<String> warnings, String fallback) {
-        if (value != null && !value.isBlank()) {
-            return value.trim();
-        }
-        warnings.add("payload." + fieldName + " ausente, se usó '" + fallback + "'");
-        return fallback;
-    }
-
-    private String buildDireccion(PrestadorAltaWebhookDTO evento, List<String> warnings) {
-        if (evento == null) {
-            warnings.add("payload.direccion ausente, se usó 'Sin direccion'");
-            return "Sin direccion";
-        }
-        if (isNotBlank(evento.getDireccion())) {
-            return evento.getDireccion().trim();
-        }
-
-        List<String> partes = new ArrayList<>();
-        if (isNotBlank(evento.getCalle())) {
-            StringBuilder calleNumero = new StringBuilder(evento.getCalle().trim());
-            if (isNotBlank(evento.getNumero())) {
-                calleNumero.append(" ").append(evento.getNumero().trim());
-            }
-            partes.add(calleNumero.toString());
-        }
-        if (isNotBlank(evento.getPiso())) {
-            partes.add("Piso " + evento.getPiso().trim());
-        }
-        if (isNotBlank(evento.getDepartamento())) {
-            partes.add("Depto " + evento.getDepartamento().trim());
-        }
-        if (isNotBlank(evento.getCiudad())) {
-            partes.add(evento.getCiudad().trim());
-        }
-        if (isNotBlank(evento.getEstado())) {
-            partes.add(evento.getEstado().trim());
-        }
-
-        if (partes.isEmpty()) {
-            warnings.add("payload.direccion ausente, se usó 'Sin direccion'");
-            return "Sin direccion";
-        }
-        return String.join(", ", partes);
-    }
-
-    private boolean isNotBlank(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    private Long extractZonaId(PrestadorAltaWebhookDTO evento, List<String> warnings) {
-        if (evento.getZonas() == null || evento.getZonas().isEmpty()) {
-            warnings.add("payload.zonas ausente o vacío, se mantuvo zona actual");
-            return null;
-        }
-        PrestadorAltaWebhookDTO.ZonaItem zonaItem = evento.getZonas().get(0);
-        if (zonaItem == null || zonaItem.getId() == null) {
-            warnings.add("payload.zonas[0].id ausente, se mantuvo zona actual");
-            return null;
-        }
-        if (evento.getZonas().size() > 1) {
-            warnings.add("payload.zonas contiene múltiples entradas, se tomó la primera");
-        }
-        return zonaItem.getId();
-    }
-
-    private List<Habilidad> buildHabilidadesFromEvento(PrestadorAltaWebhookDTO evento, List<String> warnings) {
-        if (evento.getHabilidades() == null || evento.getHabilidades().isEmpty()) {
-            return List.of();
-        }
-        List<Habilidad> habilidades = new ArrayList<>();
-        for (PrestadorAltaWebhookDTO.HabilidadItem item : evento.getHabilidades()) {
-            if (item == null) {
-                continue;
-            }
-            if (item.getId() == null) {
-                warnings.add("habilidad sin id ignorada para prestador " + evento.getId());
-                continue;
-            }
-            Habilidad h = new Habilidad();
-            h.setId(item.getId()); // interpretado como ID externo en PrestadorSyncService
-            h.setExternalId(item.getId());
-            h.setNombre(item.getNombre());
-            if (item.getIdRubro() != null) {
-                Rubro r = new Rubro();
-                r.setId(item.getIdRubro());
-                r.setExternalId(item.getIdRubro());
-                h.setRubro(r);
-            }
-            habilidades.add(h);
-        }
-        return habilidades;
     }
 
     private String getStackTrace(Throwable t) {
