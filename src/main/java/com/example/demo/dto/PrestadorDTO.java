@@ -6,10 +6,6 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -24,6 +20,7 @@ public class PrestadorDTO {
     private String estado;
     private Double precioHora;
     private Long zonaId;
+    private List<Long> zonaIds;
     private List<Habilidad> habilidades;
     private List<Short> calificacion;
     private Integer trabajosFinalizados;

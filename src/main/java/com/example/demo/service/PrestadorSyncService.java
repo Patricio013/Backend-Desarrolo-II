@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -32,18 +33,7 @@ public class PrestadorSyncService {
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Prestador upsertDesdeDTO(PrestadorDTO dto) {
     // 1) Zona
-    Zona zona = null;
-    if (dto.getZonaId() != null) {
-      zona = zonaRepository.findByExternalId(dto.getZonaId()).orElse(null);
-      if (zona == null) {
-        // Crear zona on-the-fly si no existe en catálogo
-        zona = Zona.builder()
-            .externalId(dto.getZonaId())
-            .nombre(("Zona " + dto.getZonaId()))
-            .build();
-        zona = zonaRepository.save(zona);
-      }
-    }
+    Zona zona = resolveZona(dto);
 
     // 2) Habilidades (resolver existentes o crear)
     List<Habilidad> habilidades = null;
@@ -59,7 +49,8 @@ public class PrestadorSyncService {
     p.setEmail(dto.getEmail());
     p.setTelefono(dto.getTelefono());
     p.setDireccion(dto.getDireccion());
-    p.setEstado(dto.getEstado());
+    String estado = dto.getEstado() != null ? dto.getEstado() : p.getEstado();
+    p.setEstado(estado != null ? estado : "ACTIVO");
     p.setPrecioHora(dto.getPrecioHora());
     if (zona != null) {
       p.setZona(zona);
@@ -113,6 +104,25 @@ public class PrestadorSyncService {
         .orElseThrow(() -> new IllegalArgumentException("Prestador no encontrado para usuario: " + userExternalId));
     p.setEstado("INACTIVO");
     prestadorRepository.save(p);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void rechazarPorUsuarioId(Long userExternalId) {
+    if (userExternalId == null) {
+      throw new IllegalArgumentException("userExternalId requerido");
+    }
+    Prestador p = prestadorRepository.findByExternalId(userExternalId)
+        .orElseThrow(() -> new IllegalArgumentException("Prestador no encontrado para usuario: " + userExternalId));
+    p.setEstado("RECHAZADO");
+    prestadorRepository.save(p);
+  }
+
+  @Transactional(readOnly = true)
+  public Optional<Prestador> buscarPorUsuarioId(Long userExternalId) {
+    if (userExternalId == null) {
+      return Optional.empty();
+    }
+    return prestadorRepository.findByExternalId(userExternalId);
   }
 
   private List<Habilidad> resolveOrCreateHabilidades(List<Habilidad> incoming) {
@@ -181,5 +191,32 @@ public class PrestadorSyncService {
                 .nombre("Desconocido")
                 .build()
         ));
+  }
+
+  private Zona resolveZona(PrestadorDTO dto) {
+    List<Long> zonaIds = dto.getZonaIds();
+    if ((zonaIds == null || zonaIds.isEmpty()) && dto.getZonaId() != null) {
+      zonaIds = List.of(dto.getZonaId());
+    }
+    if (zonaIds == null || zonaIds.isEmpty()) {
+      return null;
+    }
+    Zona primary = null;
+    for (Long externalId : zonaIds) {
+      if (externalId == null) {
+        continue;
+      }
+      Zona zona = zonaRepository.findByExternalId(externalId)
+          .orElseGet(() -> zonaRepository.save(
+              Zona.builder()
+                  .externalId(externalId)
+                  .nombre("Zona " + externalId)
+                  .build()
+          ));
+      if (primary == null) {
+        primary = zona;
+      }
+    }
+    return primary;
   }
 }
