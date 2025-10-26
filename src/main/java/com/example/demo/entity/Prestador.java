@@ -68,6 +68,14 @@ public class Prestador {
 
     private Integer trabajosFinalizados;
 
+    @ElementCollection
+    @CollectionTable(
+        name = "prestador_direccion",
+        joinColumns = @JoinColumn(name = "prestador_id")
+    )
+    @Builder.Default
+    private List<PrestadorDireccion> direcciones = new ArrayList<>();
+
     public Prestador(Long id) {
         this.id = id;
     }

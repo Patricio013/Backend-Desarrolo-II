@@ -18,6 +18,11 @@ import com.example.demo.service.ZonaSyncService;
 import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
 import com.example.demo.service.HabilidadSyncService;
+import com.example.demo.service.PrestadorSyncService;
+import com.example.demo.dto.PrestadorDTO;
+import com.example.demo.entity.Habilidad;
+import com.example.demo.entity.Rubro;
+import com.example.demo.dto.PrestadorDireccionDTO;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +54,7 @@ public class WebhookTestController {
     private final ZonaSyncService zonaSyncService;
     private final HabilidadSyncService habilidadSyncService;
     private final ObjectMapper objectMapper;
+    private final PrestadorSyncService prestadorSyncService;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ModuleResponse<Map<String, Object>>> receive(
@@ -110,6 +116,9 @@ public class WebhookTestController {
                 payloadSection = extractMap(safePayload, "cuerpo");
             }
             boolean solicitudCreada = false;
+            boolean prestadorUpsert = false;
+            boolean prestadorDesactivado = false;
+            Long prestadorIdProcesado = null;
             Long solicitudIdCreada = null;
             boolean solicitudCancelada = false;
             Long solicitudIdCancelada = null;
@@ -259,6 +268,81 @@ public class WebhookTestController {
                 }
             }
 
+            // ==== Usuarios -> Prestadores (ABM por eventos de usuarios) ====
+            if (payloadSection != null
+                    && topicMatches(topic, "user", "users")
+                    && eventMatches(eventName, "user", "created", "user_created")) {
+                try {
+                    String role = firstNonNull(
+                            extractString(payloadSection, "role"),
+                            extractString(payloadSection, "rol")
+                    );
+                    if (role != null && role.equalsIgnoreCase("PRESTADOR")) {
+                        Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
+                        if (userId == null) {
+                            log.warn("user_created sin userId/id: {}", payloadSection);
+                        } else {
+                            PrestadorDTO dto = buildPrestadorDTOFromUserEvent(safePayload, payloadSection);
+                            dto.setId(userId);
+                            dto.setEstado("ACTIVO");
+                            prestadorSyncService.upsertDesdeDTO(dto);
+                            prestadorUpsert = true;
+                            prestadorIdProcesado = userId;
+                        }
+                    } else {
+                        log.info("user_created ignorado por rol: {}", role);
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando user_created -> prestador", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "user", "users")
+                    && eventMatches(eventName, "user", "updated", "user_updated")) {
+                try {
+                    String role = firstNonNull(
+                            extractString(payloadSection, "role"),
+                            extractString(payloadSection, "rol")
+                    );
+                    if (role != null && role.equalsIgnoreCase("PRESTADOR")) {
+                        Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
+                        if (userId == null) {
+                            log.warn("user_updated sin userId/id: {}", payloadSection);
+                        } else {
+                            PrestadorDTO dto = buildPrestadorDTOFromUserEvent(safePayload, payloadSection);
+                            dto.setId(userId);
+                            dto.setEstado("ACTIVO");
+                            prestadorSyncService.upsertDesdeDTO(dto);
+                            prestadorUpsert = true;
+                            prestadorIdProcesado = userId;
+                        }
+                    } else {
+                        log.info("user_updated ignorado por rol: {}", role);
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando user_updated -> prestador", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "user", "users")
+                    && eventMatches(eventName, "user", "deactivated", "user_deactivated")) {
+                try {
+                    Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
+                    if (userId == null) {
+                        log.warn("user_deactivated sin id/userId: {}", payloadSection);
+                    } else {
+                        prestadorSyncService.desactivarPorUsuarioId(userId);
+                        prestadorDesactivado = true;
+                        prestadorIdProcesado = userId;
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando user_deactivated -> prestador", e);
+                }
+            }
+
+            // ==== Resto de handlers existentes ====
             if (payloadSection != null
                     && topicMatches(topic, "habilidad", "catalogue.habilidad.alta", "matching.habilidad.alta")
                     && eventMatches(eventName, "habilidad", "alta")) {
@@ -399,6 +483,11 @@ public class WebhookTestController {
             if (solicitudIdCreada != null) {
                 storedPayload.put("solicitudId", solicitudIdCreada);
             }
+            storedPayload.put("prestadorUpsert", prestadorUpsert);
+            storedPayload.put("prestadorDesactivado", prestadorDesactivado);
+            if (prestadorIdProcesado != null) {
+                storedPayload.put("prestadorId", prestadorIdProcesado);
+            }
             storedPayload.put("solicitudCancelada", solicitudCancelada);
             if (solicitudIdCancelada != null) {
                 storedPayload.put("solicitudIdCancelada", solicitudIdCancelada);
@@ -475,6 +564,11 @@ public class WebhookTestController {
             responsePayload.put("solicitudCreada", solicitudCreada);
             if (solicitudIdCreada != null) {
                 responsePayload.put("solicitudId", solicitudIdCreada);
+            }
+            responsePayload.put("prestadorUpsert", prestadorUpsert);
+            responsePayload.put("prestadorDesactivado", prestadorDesactivado);
+            if (prestadorIdProcesado != null) {
+                responsePayload.put("prestadorId", prestadorIdProcesado);
             }
             responsePayload.put("solicitudCancelada", solicitudCancelada);
             if (solicitudIdCancelada != null) {
@@ -587,6 +681,200 @@ public class WebhookTestController {
     }
 
     // ===== Helpers =====
+
+    private PrestadorDTO buildPrestadorDTOFromUserEvent(Map<String, Object> root, Map<String, Object> payloadSection) {
+        String firstName = extractString(payloadSection, "firstName");
+        String lastName = extractString(payloadSection, "lastName");
+        String email = extractString(payloadSection, "email");
+        String phone = firstNonNull(
+                extractString(payloadSection, "phoneNumber"),
+                extractString(payloadSection, "telefono")
+        );
+
+        String direccion = composeDireccion(payloadSection);
+
+        Long zonaId = extractFirstIdFromMixedList(root, "zones");
+
+        java.util.List<Habilidad> habilidades = extractHabilidadesFlexible(root);
+
+        return PrestadorDTO.builder()
+                .nombre(firstName != null ? firstName : "")
+                .apellido(lastName != null ? lastName : "")
+                .email(email != null ? email : "")
+                .telefono(phone != null ? phone : "")
+                .direccion(direccion != null ? direccion : "")
+                .precioHora(0.0)
+                .zonaId(zonaId)
+                .habilidades(habilidades)
+                .direcciones(extractDireccionesDTO(payloadSection))
+                .build();
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.List<Long> extractLongListFlexible(Map<String, Object> payload, String key) {
+        if (payload == null) return java.util.List.of();
+        Object raw = payload.get(key);
+        if (!(raw instanceof java.util.List<?> list)) {
+            return java.util.List.of();
+        }
+        java.util.List<Long> out = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (item == null) continue;
+            if (item instanceof Number n) {
+                out.add(n.longValue());
+            } else {
+                if (item instanceof java.util.Map<?, ?> m) {
+                    Object idVal = m.get("id");
+                    if (idVal instanceof Number nn) {
+                        out.add(nn.longValue());
+                    } else if (idVal != null) {
+                        try { out.add(Long.valueOf(idVal.toString().trim())); } catch (Exception ignore) {}
+                    }
+                } else {
+                    try {
+                        String s = item.toString();
+                        if (s != null && !s.isBlank()) {
+                            out.add(Long.valueOf(s.trim()));
+                        }
+                    } catch (NumberFormatException ignore) {
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Long extractFirstIdFromMixedList(Map<String, Object> payload, String key) {
+        if (payload == null) return null;
+        Object raw = payload.get(key);
+        if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) return null;
+        Object first = list.get(0);
+        if (first == null) return null;
+        if (first instanceof Number n) return n.longValue();
+        if (first instanceof java.util.Map<?, ?> m) {
+            Object idVal = m.get("id");
+            if (idVal instanceof Number nn) return nn.longValue();
+            if (idVal != null) {
+                try { return Long.valueOf(idVal.toString().trim()); } catch (Exception ignore) {}
+            }
+        }
+        try { return Long.valueOf(first.toString().trim()); } catch (Exception ignore) { return null; }
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.List<Habilidad> extractHabilidadesFlexible(Map<String, Object> payload) {
+        Object raw = payload != null ? payload.get("skills") : null;
+        if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) return java.util.List.of();
+        java.util.List<Habilidad> out = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (item == null) continue;
+            if (item instanceof Number n) {
+                Habilidad h = new Habilidad();
+                h.setId(n.longValue());
+                out.add(h);
+            } else if (item instanceof java.util.Map<?, ?> m) {
+                Habilidad h = new Habilidad();
+                Object idVal = m.get("id");
+                if (idVal instanceof Number nn) { h.setId(nn.longValue()); }
+                else if (idVal != null) {
+                    try { h.setId(Long.valueOf(idVal.toString().trim())); } catch (Exception ignore) {}
+                }
+                Object nameVal = m.get("name");
+                if (nameVal != null) h.setNombre(nameVal.toString());
+                // rubroId puede venir como rubroId, idRubro, rubro.id
+                Long rubroId = null;
+                Object rid = m.get("rubroId");
+                if (rIdIsPresent(rid)) rubroId = asLong(rid);
+                if (rubroId == null) {
+                    Object rid2 = m.get("idRubro");
+                    if (rIdIsPresent(rid2)) rubroId = asLong(rid2);
+                }
+                if (rubroId == null) {
+                    Object rubroObj = m.get("rubro");
+                    if (rubroObj instanceof java.util.Map<?, ?> rmap) {
+                        Object inner = rmap.get("id");
+                        if (rIdIsPresent(inner)) rubroId = asLong(inner);
+                    }
+                }
+                if (rubroId != null) {
+                    Rubro r = new Rubro();
+                    r.setId(rubroId); // usamos campo id como externalId (PrestadorSyncService lo interpreta)
+                    h.setRubro(r);
+                }
+                out.add(h);
+            } else {
+                try {
+                    Long id = Long.valueOf(item.toString().trim());
+                    Habilidad h = new Habilidad();
+                    h.setId(id);
+                    out.add(h);
+                } catch (Exception ignore) {}
+            }
+        }
+        return out;
+    }
+
+    private boolean rIdIsPresent(Object o) { return o != null && !o.toString().isBlank(); }
+    private Long asLong(Object o) { return (o instanceof Number n) ? n.longValue() : Long.valueOf(o.toString().trim()); }
+
+    @SuppressWarnings("unchecked")
+    private String composeDireccion(Map<String, Object> payloadSection) {
+        if (payloadSection == null) return null;
+        Object addrRaw = payloadSection.get("address");
+        if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
+            return null;
+        }
+        Object first = list.get(0);
+        if (!(first instanceof java.util.Map<?, ?> map)) {
+            return null;
+        }
+        String street = strOrNull(map.get("street"));
+        String number = strOrNull(map.get("number"));
+        String floor = strOrNull(map.get("floor"));
+        String apartment = strOrNull(map.get("apartment"));
+        String city = strOrNull(map.get("city"));
+        String state = strOrNull(map.get("state"));
+
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (street != null || number != null) {
+            parts.add(((street != null ? street : "") + (number != null ? " " + number : "")).trim());
+        }
+        if (floor != null || apartment != null) {
+            parts.add(((floor != null ? "Piso " + floor : "") + (apartment != null ? " Dto " + apartment : "")).trim());
+        }
+        if (city != null) parts.add(city);
+        if (state != null) parts.add(state);
+        return parts.isEmpty() ? null : String.join(", ", parts);
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.List<PrestadorDireccionDTO> extractDireccionesDTO(Map<String, Object> payloadSection) {
+        Object addrRaw = payloadSection != null ? payloadSection.get("address") : null;
+        if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.List<PrestadorDireccionDTO> out = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (!(item instanceof java.util.Map<?, ?> map)) continue;
+            PrestadorDireccionDTO d = PrestadorDireccionDTO.builder()
+                    .state(strOrNull(map.get("state")))
+                    .city(strOrNull(map.get("city")))
+                    .street(strOrNull(map.get("street")))
+                    .number(strOrNull(map.get("number")))
+                    .floor(strOrNull(map.get("floor")))
+                    .apartment(strOrNull(map.get("apartment")))
+                    .build();
+            out.add(d);
+        }
+        return out;
+    }
+
+    private String strOrNull(Object o) {
+        if (o == null) return null;
+        String s = o.toString();
+        return s.isBlank() ? null : s;
+    }
 
     private boolean looksLikeJson(String s) {
         String t = s.stripLeading();
@@ -828,6 +1116,10 @@ public class WebhookTestController {
     }
 
     private String firstNonNull(String a, String b) {
+        return a != null ? a : b;
+    }
+
+    private Long firstNonNull(Long a, Long b) {
         return a != null ? a : b;
     }
 

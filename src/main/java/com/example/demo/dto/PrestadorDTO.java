@@ -6,6 +6,10 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -23,4 +27,5 @@ public class PrestadorDTO {
     private List<Habilidad> habilidades;
     private List<Short> calificacion;
     private Integer trabajosFinalizados;
+    private List<PrestadorDireccionDTO> direcciones;
 }

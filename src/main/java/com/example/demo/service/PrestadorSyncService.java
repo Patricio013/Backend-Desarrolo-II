@@ -34,8 +34,15 @@ public class PrestadorSyncService {
     // 1) Zona
     Zona zona = null;
     if (dto.getZonaId() != null) {
-      zona = zonaRepository.findByExternalId(dto.getZonaId())
-          .orElseThrow(() -> new IllegalArgumentException("Zona no encontrada: " + dto.getZonaId()));
+      zona = zonaRepository.findByExternalId(dto.getZonaId()).orElse(null);
+      if (zona == null) {
+        // Crear zona on-the-fly si no existe en catálogo
+        zona = Zona.builder()
+            .externalId(dto.getZonaId())
+            .nombre(("Zona " + dto.getZonaId()))
+            .build();
+        zona = zonaRepository.save(zona);
+      }
     }
 
     // 2) Habilidades (resolver existentes o crear)
@@ -77,7 +84,35 @@ public class PrestadorSyncService {
       p.getHabilidades().addAll(habilidades);
     }
 
+    // direcciones (reemplazo controlado)
+    if (dto.getDirecciones() != null) {
+      p.getDirecciones().clear();
+      for (var d : dto.getDirecciones()) {
+        if (d == null) continue;
+        com.example.demo.entity.PrestadorDireccion pd = com.example.demo.entity.PrestadorDireccion.builder()
+            .state(safeTrim(d.getState()))
+            .city(safeTrim(d.getCity()))
+            .street(safeTrim(d.getStreet()))
+            .number(safeTrim(d.getNumber()))
+            .floor(safeTrim(d.getFloor()))
+            .apartment(safeTrim(d.getApartment()))
+            .build();
+        p.getDirecciones().add(pd);
+      }
+    }
+
     return prestadorRepository.save(p);
+  }
+
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
+  public void desactivarPorUsuarioId(Long userExternalId) {
+    if (userExternalId == null) {
+      throw new IllegalArgumentException("userExternalId requerido");
+    }
+    Prestador p = prestadorRepository.findByExternalId(userExternalId)
+        .orElseThrow(() -> new IllegalArgumentException("Prestador no encontrado para usuario: " + userExternalId));
+    p.setEstado("INACTIVO");
+    prestadorRepository.save(p);
   }
 
   private List<Habilidad> resolveOrCreateHabilidades(List<Habilidad> incoming) {
@@ -96,22 +131,35 @@ public class PrestadorSyncService {
       }
 
       if (resolved == null) {
-        String nombre = Objects.requireNonNull(hIn.getNombre(), "Habilidad.nombre requerido");
-        Long rubroExtId = Objects.requireNonNull(
-            hIn.getRubro() != null ? hIn.getRubro().getId() : null,
-            "Habilidad.rubro.id requerido"
-        );
+        String nombre = hIn.getNombre();
+        Long rubroExtId = (hIn.getRubro() != null ? hIn.getRubro().getId() : null);
 
-        resolved = habilidadRepository.findByNombreAndRubro(nombre, rubroExtId)
-            .orElseGet(() -> {
+        if (nombre != null && rubroExtId != null) {
+          resolved = habilidadRepository.findByNombreAndRubro(nombre, rubroExtId)
+              .orElseGet(() -> {
               Rubro rubro = rubroRepository.findByExternalId(rubroExtId)
-                  .orElseThrow(() -> new IllegalArgumentException("Rubro inexistente: " + rubroExtId));
+                  .orElseGet(() -> rubroRepository.save(Rubro.builder()
+                      .externalId(rubroExtId)
+                      .nombre("Rubro " + rubroExtId)
+                      .build()));
               Habilidad nueva = new Habilidad();
               nueva.setNombre(nombre);
               nueva.setRubro(rubro);
               nueva.setExternalId(hIn.getId());
               return habilidadRepository.save(nueva);
-            });
+              });
+        } else {
+          // Fallback: crear habilidad con nombre genérico y rubro por defecto
+          Rubro rubro = ensureDefaultRubro();
+          Habilidad nueva = new Habilidad();
+          String nombreGenerico = (nombre != null && !nombre.isBlank())
+              ? nombre
+              : ("Habilidad " + (hIn.getId() != null ? hIn.getId() : "sin_id"));
+          nueva.setNombre(nombreGenerico);
+          nueva.setRubro(rubro);
+          nueva.setExternalId(hIn.getId());
+          resolved = habilidadRepository.save(nueva);
+        }
       }
 
       String key = resolved.getId() != null
@@ -120,5 +168,18 @@ public class PrestadorSyncService {
       unique.putIfAbsent(key, resolved);
     }
     return new ArrayList<>(unique.values());
+  }
+
+  private String safeTrim(String s) { return s == null ? null : s.trim(); }
+
+  private Rubro ensureDefaultRubro() {
+    Long defaultExtId = -1L;
+    return rubroRepository.findByExternalId(defaultExtId)
+        .orElseGet(() -> rubroRepository.save(
+            Rubro.builder()
+                .externalId(defaultExtId)
+                .nombre("Desconocido")
+                .build()
+        ));
   }
 }
