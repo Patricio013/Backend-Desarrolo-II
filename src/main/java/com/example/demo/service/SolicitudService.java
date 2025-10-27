@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -44,6 +45,7 @@ public class SolicitudService {
     private static final int MAX_INVITES_NON_CRITICA = 6;
     private static final int MAX_INVITES_CRITICA = 12;
     private static final int CANDIDATE_BATCH_SIZE = 20;
+    private static final int MAX_COTIZACION_ROUNDS = 2;
 
     @Autowired private NotificacionesService notificacionesService;
     @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
@@ -73,11 +75,17 @@ public class SolicitudService {
 
         int maxInicial = solicitud.isEsCritica() ? INITIAL_INVITES_CRITICA : INITIAL_INVITES_NON_CRITICA;
 
+        Set<Long> invitadosPrevios = new HashSet<>(
+            solicitudInvitacionRepository.findPrestadorIdsBySolicitud(solicitud.getId())
+        );
+        invitadosPrevios.removeIf(Objects::isNull);
+
         List<Prestador> seleccion = seleccionarPrestadores(
             solicitud,
             rubroId,
             maxInicial,
-            true
+            true,
+            invitadosPrevios
         );
 
         // Extra: si hubo asignado directo y querés excluirlo aunque no haya cotizado
@@ -193,7 +201,8 @@ public class SolicitudService {
             solicitud,
             rubroId,
             maxInicial,
-            false
+            false,
+            Collections.emptySet()
         );
 
         if (seleccion.isEmpty()) {
@@ -396,7 +405,8 @@ public class SolicitudService {
             solicitud,
             rubroId,
             CANDIDATE_BATCH_SIZE,
-            true
+            true,
+            invitados
         );
 
         Long asignado = obtenerPrestadorAsignadoId(solicitud);
@@ -437,6 +447,106 @@ public class SolicitudService {
         return null;
     }
 
+    @Transactional
+    public void registrarRechazoCotizacion(Long solicitudId,
+                                           Long prestadorId,
+                                           Long cotizacionExternaId,
+                                           String comentario) {
+        if (solicitudId == null) {
+            throw new IllegalArgumentException("solicitud_id requerido en evento cotizacion.rechazada");
+        }
+        if (prestadorId == null) {
+            throw new IllegalArgumentException("prestador_id requerido en evento cotizacion.rechazada");
+        }
+
+        Solicitud solicitud = solicitudRepository.findByExternalId(solicitudId)
+            .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + solicitudId));
+
+        var invitacionOpt = solicitudInvitacionRepository
+            .findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(solicitud.getId(), prestadorId);
+
+        SolicitudInvitacion invitacion = invitacionOpt.orElseThrow(() ->
+            new IllegalStateException("No se encontró invitación para la solicitud "
+                + solicitudId + " y prestador " + prestadorId));
+
+        if (invitacion.isRechazada()) {
+            log.debug("Evento cotizacion.rechazada repetido. solicitud={} prestador={} round={}",
+                solicitudId, prestadorId, invitacion.getRound());
+            return;
+        }
+
+        invitacion.setRechazada(true);
+        invitacion.setRechazadaAt(LocalDateTime.now());
+        if (comentario != null && !comentario.isBlank()) {
+            invitacion.setRechazoMotivo(comentario);
+        }
+        if (cotizacionExternaId != null) {
+            invitacion.setCotizacionIdExterno(cotizacionExternaId);
+        }
+        solicitudInvitacionRepository.save(invitacion);
+
+        int round = invitacion.getRound();
+        long totalInvitaciones = solicitudInvitacionRepository.countBySolicitud_IdAndRound(solicitud.getId(), round);
+        long rechazos = solicitudInvitacionRepository.countBySolicitud_IdAndRoundAndRechazadaTrue(solicitud.getId(), round);
+        boolean quedanPendientes = solicitudInvitacionRepository
+            .existsBySolicitud_IdAndRoundAndRechazadaFalse(solicitud.getId(), round);
+
+        Map<String, Object> details = new HashMap<>();
+        details.put("solicitudId", solicitud.getId());
+        details.put("round", round);
+        details.put("prestadorId", prestadorId);
+        if (cotizacionExternaId != null) {
+            details.put("cotizacionId", cotizacionExternaId);
+        }
+        if (comentario != null && !comentario.isBlank()) {
+            details.put("comentario", comentario);
+        }
+        details.put("totalInvitaciones", totalInvitaciones);
+        details.put("rechazos", rechazos);
+
+        solicitudEventsPublisher.notifySolicitudEvent(
+            solicitud,
+            "COTIZACION_RECHAZADA",
+            "Cotización rechazada",
+            "Prestador " + prestadorId + " rechazó la cotización en round " + round,
+            details
+        );
+
+        if (!quedanPendientes && totalInvitaciones > 0 && totalInvitaciones == rechazos) {
+            manejarRoundSinCotizaciones(solicitud, round);
+        }
+    }
+
+    private void manejarRoundSinCotizaciones(Solicitud solicitud, int roundActual) {
+        if (roundActual >= MAX_COTIZACION_ROUNDS) {
+            solicitud.setEstado(EstadoSolicitud.CANCELADA);
+            solicitudRepository.save(solicitud);
+            solicitudEventsPublisher.notifySolicitudEvent(
+                solicitud,
+                "SOLICITUD_CANCELADA_POR_RECHAZOS",
+                "Solicitud cancelada por rechazos",
+                "Todos los prestadores rechazaron en el round " + roundActual,
+                Map.of(
+                    "solicitudId", solicitud.getId(),
+                    "round", roundActual
+                )
+            );
+            return;
+        }
+
+        solicitud.setEstado(EstadoSolicitud.CANCELADA);
+        solicitudRepository.save(solicitud);
+
+        try {
+            recotizar(solicitud.getId());
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo iniciar la recotización automática para la solicitud "
+                + solicitud.getId(), e);
+        }
+    }
+
     public void cancelarPorId(Long solicitudId){
         if (solicitudId == null) {
             throw new IllegalArgumentException("solicitudId requerido");
@@ -474,10 +584,16 @@ public class SolicitudService {
         Solicitud solicitud,
         Long rubroId,
         int maxInicial,
-        boolean excluirCotizados
+        boolean excluirCotizados,
+        Set<Long> excluirPrestadores
     ) {
         List<Prestador> seleccion = new ArrayList<>();
         Set<Long> seleccionados = new HashSet<>();
+        Set<Long> excluidos = (excluirPrestadores == null || excluirPrestadores.isEmpty())
+            ? Collections.emptySet()
+            : excluirPrestadores.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
         PageRequest page = PageRequest.of(0, CANDIDATE_BATCH_SIZE);
 
         Long habilidadId = solicitud.getHabilidadId();
@@ -487,7 +603,7 @@ public class SolicitudService {
             List<Prestador> porHabilidad = excluirCotizados && solicitudExternalId != null
                 ? prestadorRepository.findTopByHabilidadExcluyendoLosQueCotizaron(habilidadId, solicitudExternalId, page)
                 : prestadorRepository.findTopByHabilidadRanked(habilidadId, page);
-            agregarCandidatos(seleccion, seleccionados, porHabilidad, solicitud, maxInicial);
+            agregarCandidatos(seleccion, seleccionados, porHabilidad, solicitud, maxInicial, excluidos);
         }
 
         if (seleccion.size() < maxInicial) {
@@ -496,7 +612,7 @@ public class SolicitudService {
                 List<Prestador> porRubro = excluirCotizados && solicitudExternalId != null
                     ? prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(rubroFallback, solicitudExternalId, page)
                     : prestadorRepository.findTopByRubroRanked(rubroFallback, page);
-                agregarCandidatos(seleccion, seleccionados, porRubro, solicitud, maxInicial);
+                agregarCandidatos(seleccion, seleccionados, porRubro, solicitud, maxInicial, excluidos);
             }
         }
 
@@ -508,7 +624,8 @@ public class SolicitudService {
         Set<Long> seleccionados,
         List<Prestador> candidatos,
         Solicitud solicitud,
-        int maxInicial
+        int maxInicial,
+        Set<Long> excluidos
     ) {
         if (candidatos == null || candidatos.isEmpty()) {
             return;
@@ -521,7 +638,10 @@ public class SolicitudService {
                 continue;
             }
             Long key = prestadorKey(prestador);
-            if (key == null || !seleccionados.add(key)) {
+            if (key == null) {
+                continue;
+            }
+            if ((excluidos.contains(key)) || !seleccionados.add(key)) {
                 continue;
             }
             seleccion.add(prestador);

@@ -8,7 +8,8 @@
 INSERT INTO rubro (id, external_id, nombre) VALUES
   (1, 1, 'Plomeria'),
   (2, 2, 'Electricidad'),
-  (3, 3, 'Pintura')
+  (3, 3, 'Pintura'),
+  (10, 300, 'Gasistas')
 ON CONFLICT (id) DO NOTHING;
 
 -- =========================
@@ -22,7 +23,8 @@ INSERT INTO habilidad (id, external_id, nombre, rubro_id) VALUES
   (5, 5, 'Emergencias electricas', 2),
   (6, 6, 'Barnizado exterior', 3),
   (7, 7, 'Destapaciones', 1),
-  (8, 120, 'Cambio en el baño', 1)
+  (8, 120, 'Cambio en el baño', 1),
+  (10, 501, 'Gasista matriculado', 10)
 ON CONFLICT (id) DO NOTHING;
 
 -- =========================
@@ -51,7 +53,13 @@ INSERT INTO prestador (internal_id, external_id, nombre, apellido, email, telefo
   (4, 4, 'Sofia','Martinez','sofia.martinez@mail.com','111111114','Dir 4','ACTIVO',1650,1,18),
   (5, 5, 'Diego','Ruiz','diego.ruiz@mail.com','111111115','Dir 5','ACTIVO',1550,2,9),
   (6, 6, 'Laura','Benitez','laura.benitez@mail.com','111111116','Dir 6','ACTIVO',1600,1,11),
-  (7, 7, 'Marcelo','Ibarra','marcelo.ibarra@mail.com','111111117','Dir 7','ACTIVO',1400,2,7)
+  (7, 7, 'Marcelo','Ibarra','marcelo.ibarra@mail.com','111111117','Dir 7','ACTIVO',1400,2,7),
+  (101, 101, 'Juan','Perez','juan.perez@example.com','111111118','Laplace 1200','ACTIVO',4500,1,5),
+  (102, 102, 'Maria','Lopez','maria.lopez@example.com','111111119','Amenabar 900','ACTIVO',4700,1,7),
+  (103, 103, 'Carlos','Gomez','carlos.gomez@example.com','111111120','Cabildo 450','ACTIVO',4800,2,6),
+  (104, 104, 'Gabriel','Sosa','gabriel.sosa@example.com','111111121','Laplace 1450','ACTIVO',4600,1,8),
+  (105, 105, 'Luciana','Rios','luciana.rios@example.com','111111122','Amenabar 980','ACTIVO',4550,2,6),
+  (106, 106, 'Diego','Valdez','diego.valdez@example.com','111111123','Cabildo 4500','ACTIVO',4750,1,9)
 ON CONFLICT (internal_id) DO NOTHING;
 
 -- =========================
@@ -64,7 +72,13 @@ INSERT INTO prestador_calificacion (prestador_id, puntuacion) VALUES
   (4,5),(4,5),(4,4),
   (5,4),(5,4),(5,5),
   (6,5),(6,4),
-  (7,3),(7,4);
+  (7,3),(7,4),
+  (101,5),(101,4),
+  (102,5),(102,5),
+  (103,4),(103,4),
+  (104,5),(104,4),
+  (105,5),(105,5),
+  (106,4),(106,4);
 
 -- =========================
 -- Habilidades asignadas (prestador_id -> internal_id)
@@ -76,7 +90,13 @@ INSERT INTO prestador_habilidad (prestador_id, habilidad_id) VALUES
   (4,3), (4,5),
   (5,5),
   (6,4), (6,6),
-  (7,2), (7,8);
+  (7,2), (7,8),
+  (101,10),
+  (102,10),
+  (103,10),
+  (104,10),
+  (105,10),
+  (106,10);
 
 -- =========================
 -- Solicitudes (usa external_id y fecha/horario)
@@ -90,8 +110,25 @@ INSERT INTO solicitud (external_id, usuario_id, rubro_id, habilidad_id, titulo, 
   -- Solicitud legacy con rubro pero sin habilidad
   (1003, 1, 1, NULL, 'Reparación de cañería', 'Perdida en la cocina', 'ASIGNADA', 1, true, false, '2025-09-12', '09:00', NOW(), NOW(), '09:00-10:00'),
   -- Solicitud con habilidad 120 (ejemplo del webhook) para validar resolución automática de rubro
-  (120045, 2, NULL, 120, 'Cambio en el baño', 'Pérdida en la canilla del baño.', 'CREADA', NULL, false, false, '2025-09-12', '13:00', NOW(), NOW(), NULL)
+  (120045, 2, NULL, 120, 'Cambio en el baño', 'Pérdida en la canilla del baño.', 'CREADA', NULL, false, false, '2025-09-12', '13:00', NOW(), NOW(), NULL),
+  -- Escenario gasistas: listo para recibir rechazos (round 1 abierto)
+  (9001, 1, 300, 501, 'Arreglo pérdida de gas', 'Pico en cocina', 'COTIZANDO', NULL, true, false, CURRENT_DATE, '10:00', NOW(), NOW(), NULL)
 ON CONFLICT (external_id) DO NOTHING;
+
+-- =========================
+-- Invitaciones emitidas para solicitud 9001 (round 1)
+-- =========================
+INSERT INTO solicitud_invitacion (solicitud_id, prestador_id, round, enviado_at, rechazada, cotizacion_id_externo, rechazo_motivo)
+SELECT s.internal_id, p.internal_id, 1, NOW(), FALSE, NULL, NULL
+FROM solicitud s
+JOIN prestador p ON p.external_id IN (101, 102, 103)
+WHERE s.external_id = 9001
+  AND NOT EXISTS (
+        SELECT 1 FROM solicitud_invitacion si
+        WHERE si.solicitud_id = s.internal_id
+          AND si.prestador_id = p.internal_id
+          AND si.round = 1
+    );
 
 -- ======================================================================
 -- Reajuste de secuencias (PK)

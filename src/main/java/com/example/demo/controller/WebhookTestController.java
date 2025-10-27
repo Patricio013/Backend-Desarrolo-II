@@ -140,6 +140,9 @@ public class WebhookTestController {
             boolean cotizacionRecibida = false;
             Map<String, Object> cotizacionRecibidaDetails = null;
             List<String> cotizacionRecibidaWarnings = new ArrayList<>();
+            boolean cotizacionRechazada = false;
+            Map<String, Object> cotizacionRechazadaDetails = null;
+            List<String> cotizacionRechazadaWarnings = new ArrayList<>();
             boolean calificacionProcesada = false;
             Long calificacionPrestadorId = null;
             Long calificacionEventoId = null;
@@ -239,6 +242,44 @@ public class WebhookTestController {
                     } catch (Exception e) {
                         cotizacionAceptadaWarnings.add("Error inesperado al aceptar cotización: " + e.getMessage());
                         log.error("Error aceptando cotización {}-{} desde webhook", solicitudId, prestadorId, e);
+                    }
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "cotizacion", "cotizaciones")
+                    && eventMatches(eventName, "cotizacion", "rechazada", "cotizacion.rechazada")) {
+                Long solicitudId = extractLong(payloadSection, "solicitud_id");
+                Long prestadorId = extractLong(payloadSection, "prestador_id");
+                Long cotizacionId = extractLong(payloadSection, "cotizacion_id");
+                String comentario = firstNonNull(
+                        extractString(payloadSection, "comentario"),
+                        extractString(payloadSection, "motivo")
+                );
+
+                if (solicitudId == null || prestadorId == null) {
+                    cotizacionRechazadaWarnings.add("solicitud_id o prestador_id ausentes en evento de cotizacion.rechazada");
+                    log.warn("Evento cotizacion.rechazada incompleto: {}", payloadSection);
+                } else {
+                    try {
+                        solicitudService.registrarRechazoCotizacion(solicitudId, prestadorId, cotizacionId, comentario);
+                        cotizacionRechazada = true;
+                        Map<String, Object> rejectionDetails = new java.util.HashMap<>();
+                        rejectionDetails.put("solicitudId", solicitudId);
+                        rejectionDetails.put("prestadorId", prestadorId);
+                        if (cotizacionId != null) {
+                            rejectionDetails.put("cotizacionId", cotizacionId);
+                        }
+                        if (comentario != null && !comentario.isBlank()) {
+                            rejectionDetails.put("comentario", comentario);
+                        }
+                        cotizacionRechazadaDetails = rejectionDetails;
+                    } catch (IllegalArgumentException | IllegalStateException e) {
+                        cotizacionRechazadaWarnings.add(e.getMessage());
+                        log.warn("Error validando cotizacion.rechazada {}-{}: {}", solicitudId, prestadorId, e.getMessage());
+                    } catch (Exception e) {
+                        cotizacionRechazadaWarnings.add("Error inesperado al procesar rechazo de cotización: " + e.getMessage());
+                        log.error("Error procesando cotizacion.rechazada solicitud={} prestador={}", solicitudId, prestadorId, e);
                     }
                 }
             }
@@ -585,6 +626,13 @@ public class WebhookTestController {
             if (!cotizacionRecibidaWarnings.isEmpty()) {
                 storedPayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
             }
+            storedPayload.put("cotizacionRechazada", cotizacionRechazada);
+            if (cotizacionRechazadaDetails != null) {
+                storedPayload.put("cotizacionRechazadaDetails", cotizacionRechazadaDetails);
+            }
+            if (!cotizacionRechazadaWarnings.isEmpty()) {
+                storedPayload.put("cotizacionRechazadaWarnings", cotizacionRechazadaWarnings);
+            }
             storedPayload.put("calificacionProcesada", calificacionProcesada);
             if (calificacionPrestadorId != null) {
                 storedPayload.put("calificacionPrestadorId", calificacionPrestadorId);
@@ -688,6 +736,13 @@ public class WebhookTestController {
             }
             if (!cotizacionRecibidaWarnings.isEmpty()) {
                 responsePayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
+            }
+            responsePayload.put("cotizacionRechazada", cotizacionRechazada);
+            if (cotizacionRechazadaDetails != null) {
+                responsePayload.put("cotizacionRechazadaDetails", cotizacionRechazadaDetails);
+            }
+            if (!cotizacionRechazadaWarnings.isEmpty()) {
+                responsePayload.put("cotizacionRechazadaWarnings", cotizacionRechazadaWarnings);
             }
             responsePayload.put("calificacionProcesada", calificacionProcesada);
             if (calificacionPrestadorId != null) {
