@@ -9,6 +9,7 @@ import com.example.demo.dto.RubroModificacionWebhookDTO;
 import com.example.demo.dto.ZonaAltaWebhookDTO;
 import com.example.demo.dto.ZonaModificacionWebhookDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.dto.RecibirCalificacionesDTO;
 import com.example.demo.entity.WebhookEvent;
 import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.CotizacionService;
@@ -19,6 +20,7 @@ import com.example.demo.service.SolicitudService;
 import com.example.demo.service.WebhookEventService;
 import com.example.demo.service.HabilidadSyncService;
 import com.example.demo.service.PrestadorSyncService;
+import com.example.demo.service.CalificacionService;
 import com.example.demo.dto.PrestadorDTO;
 import com.example.demo.entity.Habilidad;
 import com.example.demo.entity.Prestador;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.lang.reflect.Array;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -51,6 +54,7 @@ public class WebhookTestController {
     private final WebhookEventService webhookEventService;
     private final SolicitudService solicitudService;
     private final CotizacionService cotizacionService;
+    private final CalificacionService calificacionService;
     private final RubroSyncService rubroSyncService;
     private final ZonaSyncService zonaSyncService;
     private final HabilidadSyncService habilidadSyncService;
@@ -136,6 +140,14 @@ public class WebhookTestController {
             boolean cotizacionRecibida = false;
             Map<String, Object> cotizacionRecibidaDetails = null;
             List<String> cotizacionRecibidaWarnings = new ArrayList<>();
+            boolean calificacionProcesada = false;
+            Long calificacionPrestadorId = null;
+            Long calificacionEventoId = null;
+            Long calificacionSolicitudId = null;
+            Long calificacionUsuarioId = null;
+            List<Short> calificacionPuntuaciones = null;
+            String calificacionComentario = null;
+            List<String> calificacionWarnings = new ArrayList<>();
             boolean rubroProcesado = false;
             Long rubroIdProcesado = null;
             List<String> rubroWarnings = new ArrayList<>();
@@ -197,8 +209,8 @@ public class WebhookTestController {
             }
 
             if (payloadSection != null
-                    && eventName != null
-                    && eventName.equalsIgnoreCase("cotizacion.aceptada")) {
+                    && topicMatches(topic, "cotizacion", "cotizaciones")
+                    && eventMatches(eventName, "cotizacion", "aceptada", "cotizacion.aceptada")) {
                 // TODO(suscripciones): ajustar canal/tópico definitivo para eventos de cotización
                 Long solicitudId = extractLong(payloadSection, "solicitud_id");
                 Long prestadorId = extractLong(payloadSection, "prestador_id");
@@ -266,6 +278,50 @@ public class WebhookTestController {
                 } catch (Exception e) {
                     cotizacionRecibidaWarnings.add("Error inesperado al procesar cotización: " + e.getMessage());
                     log.error("Error procesando cotizacion enviada desde webhook", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "calificacion", "calificaciones")
+                    && eventMatches(eventName, "calificacion", "creada", "creado", "recibida", "recibidas", "actualizada", "actualizacion")) {
+                RecibirCalificacionesDTO calificacionDto = null;
+                try {
+                    calificacionDto = buildCalificacionDTO(payloadSection);
+                } catch (IllegalArgumentException e) {
+                    calificacionWarnings.add(e.getMessage());
+                    log.warn("Payload de calificaciones inválido: {}", e.getMessage());
+                }
+
+                if (calificacionDto != null) {
+                    Long prestadorId = calificacionDto.getId();
+                    if (prestadorId == null) {
+                        calificacionWarnings.add("prestador_id ausente en evento de calificaciones");
+                        log.warn("Evento calificacion sin prestador_id: {}", payloadSection);
+                    } else if (calificacionDto.getPuntuaciones() == null || calificacionDto.getPuntuaciones().isEmpty()) {
+                        calificacionWarnings.add("puntuaciones ausentes en evento de calificaciones");
+                        log.warn("Evento calificacion sin puntuaciones: {}", payloadSection);
+                    } else {
+                        calificacionPrestadorId = prestadorId;
+                        calificacionPuntuaciones = new ArrayList<>(calificacionDto.getPuntuaciones());
+                        calificacionEventoId = extractLong(payloadSection, "calificacion_id");
+                        calificacionSolicitudId = extractLong(payloadSection, "solicitud_id");
+                        calificacionUsuarioId = extractLong(payloadSection, "usuario_id");
+                        calificacionComentario = firstNonNull(
+                                extractString(payloadSection, "comentario"),
+                                extractString(payloadSection, "comment")
+                        );
+
+                        try {
+                            calificacionService.appendBatchItem(calificacionDto);
+                            calificacionProcesada = true;
+                        } catch (ResponseStatusException e) {
+                            calificacionWarnings.add(e.getReason() != null ? e.getReason() : e.getStatusCode().toString());
+                            log.warn("Error validando calificaciones para prestador {}: {}", prestadorId, e.getMessage());
+                        } catch (Exception e) {
+                            calificacionWarnings.add("Error inesperado al procesar calificaciones: " + e.getMessage());
+                            log.error("Error procesando calificaciones para prestador {}", prestadorId, e);
+                        }
+                    }
                 }
             }
 
@@ -529,6 +585,28 @@ public class WebhookTestController {
             if (!cotizacionRecibidaWarnings.isEmpty()) {
                 storedPayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
             }
+            storedPayload.put("calificacionProcesada", calificacionProcesada);
+            if (calificacionPrestadorId != null) {
+                storedPayload.put("calificacionPrestadorId", calificacionPrestadorId);
+            }
+            if (calificacionEventoId != null) {
+                storedPayload.put("calificacionId", calificacionEventoId);
+            }
+            if (calificacionSolicitudId != null) {
+                storedPayload.put("calificacionSolicitudId", calificacionSolicitudId);
+            }
+            if (calificacionUsuarioId != null) {
+                storedPayload.put("calificacionUsuarioId", calificacionUsuarioId);
+            }
+            if (calificacionPuntuaciones != null) {
+                storedPayload.put("calificacionPuntuaciones", calificacionPuntuaciones);
+            }
+            if (calificacionComentario != null && !calificacionComentario.isBlank()) {
+                storedPayload.put("calificacionComentario", calificacionComentario);
+            }
+            if (!calificacionWarnings.isEmpty()) {
+                storedPayload.put("calificacionWarnings", calificacionWarnings);
+            }
             storedPayload.put("habilidadProcesada", habilidadProcesada);
             if (habilidadIdProcesada != null) {
                 storedPayload.put("habilidadId", habilidadIdProcesada);
@@ -610,6 +688,28 @@ public class WebhookTestController {
             }
             if (!cotizacionRecibidaWarnings.isEmpty()) {
                 responsePayload.put("cotizacionRecibidaWarnings", cotizacionRecibidaWarnings);
+            }
+            responsePayload.put("calificacionProcesada", calificacionProcesada);
+            if (calificacionPrestadorId != null) {
+                responsePayload.put("calificacionPrestadorId", calificacionPrestadorId);
+            }
+            if (calificacionEventoId != null) {
+                responsePayload.put("calificacionId", calificacionEventoId);
+            }
+            if (calificacionSolicitudId != null) {
+                responsePayload.put("calificacionSolicitudId", calificacionSolicitudId);
+            }
+            if (calificacionUsuarioId != null) {
+                responsePayload.put("calificacionUsuarioId", calificacionUsuarioId);
+            }
+            if (calificacionPuntuaciones != null) {
+                responsePayload.put("calificacionPuntuaciones", calificacionPuntuaciones);
+            }
+            if (calificacionComentario != null && !calificacionComentario.isBlank()) {
+                responsePayload.put("calificacionComentario", calificacionComentario);
+            }
+            if (!calificacionWarnings.isEmpty()) {
+                responsePayload.put("calificacionWarnings", calificacionWarnings);
             }
             responsePayload.put("habilidadProcesada", habilidadProcesada);
             if (habilidadIdProcesada != null) {
@@ -995,6 +1095,119 @@ public class WebhookTestController {
             return (Map<String, Object>) map;
         }
         return null;
+    }
+
+    private RecibirCalificacionesDTO buildCalificacionDTO(Map<String, Object> payload) {
+        if (payload == null) {
+            throw new IllegalArgumentException("Payload de calificaciones vacío");
+        }
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        Long prestadorId = firstNonNull(
+                firstNonNull(extractLong(payload, "prestador_id"), extractLong(payload, "prestadorId")),
+                extractLong(payload, "id")
+        );
+        dto.setId(prestadorId);
+
+        List<Short> puntuaciones = extractShortList(payload, "puntuaciones", "calificaciones", "scores", "ratings");
+        if (puntuaciones == null || puntuaciones.isEmpty()) {
+            Short single = extractShort(payload, "puntuacion", "rating", "score");
+            if (single != null) {
+                puntuaciones = List.of(single);
+            }
+        }
+        dto.setPuntuaciones(puntuaciones);
+        return dto;
+    }
+
+    private List<Short> extractShortList(Map<String, Object> payload, String... keys) {
+        if (payload == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (key == null) continue;
+            Object raw = payload.get(key);
+            if (raw == null) continue;
+            List<Short> parsed = convertToShortList(raw);
+            if (parsed != null) {
+                return parsed;
+            }
+        }
+        return null;
+    }
+
+    private Short extractShort(Map<String, Object> payload, String... keys) {
+        if (payload == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            if (key == null) continue;
+            Object raw = payload.get(key);
+            if (raw == null) continue;
+            return convertToShort(raw);
+        }
+        return null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Short> convertToShortList(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        List<Short> result = new ArrayList<>();
+        if (raw instanceof List<?> list) {
+            for (Object element : list) {
+                result.add(convertToShort(element));
+            }
+            return result;
+        }
+        if (raw.getClass().isArray()) {
+            int length = Array.getLength(raw);
+            for (int i = 0; i < length; i++) {
+                result.add(convertToShort(Array.get(raw, i)));
+            }
+            return result;
+        }
+        if (raw instanceof CharSequence seq) {
+            String text = seq.toString().trim();
+            if (text.isEmpty()) {
+                return List.of();
+            }
+            String[] parts = text.split(",");
+            for (String part : parts) {
+                if (part != null && !part.isBlank()) {
+                    result.add(convertToShort(part.trim()));
+                }
+            }
+            return result;
+        }
+        if (raw instanceof Number) {
+            return List.of(convertToShort(raw));
+        }
+        return null;
+    }
+
+    private Short convertToShort(Object value) {
+        if (value == null) {
+            throw new IllegalArgumentException("Puntuación nula no permitida");
+        }
+        if (value instanceof Short s) {
+            return s;
+        }
+        if (value instanceof Number n) {
+            return (short) n.intValue();
+        }
+        if (value instanceof CharSequence seq) {
+            String text = seq.toString().trim();
+            if (text.isEmpty()) {
+                throw new IllegalArgumentException("Puntuación vacía no permitida");
+            }
+            try {
+                return Short.valueOf(text);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException("Valor de puntuación inválido: " + text, e);
+            }
+        }
+        throw new IllegalArgumentException("Tipo de puntuación no soportado: " + value.getClass());
     }
 
     private String extractHeader(Map<String, String> headers, String... candidateNames) {

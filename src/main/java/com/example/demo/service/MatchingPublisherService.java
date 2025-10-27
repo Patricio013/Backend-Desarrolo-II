@@ -218,7 +218,9 @@ public class MatchingPublisherService {
             BigDecimal impuestos,
             BigDecimal comisiones,
             String moneda,
-            String metodoPreferido
+            String metodoPreferido,
+            String descripcion,
+            String descripcionSolicitud
     ) {
         if (!properties.publishEnabled()) {
             log.debug("Matching publish disabled; skipping pago emitida publication");
@@ -235,6 +237,12 @@ public class MatchingPublisherService {
         pago.put("comisiones", comisiones);
         pago.put("moneda", moneda);
         pago.put("metodoPreferido", metodoPreferido);
+        if (descripcion != null && !descripcion.isBlank()) {
+            pago.put("descripcion", descripcion);
+        }
+        if (descripcionSolicitud != null && !descripcionSolicitud.isBlank()) {
+            pago.put("descripcionSolicitud", descripcionSolicitud);
+        }
 
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("generatedAt", Instant.now().toString());
