@@ -21,6 +21,7 @@ import com.example.demo.service.HabilidadSyncService;
 import com.example.demo.service.PrestadorSyncService;
 import com.example.demo.dto.PrestadorDTO;
 import com.example.demo.entity.Habilidad;
+import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Rubro;
 import com.example.demo.dto.PrestadorDireccionDTO;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -305,20 +306,22 @@ public class WebhookTestController {
                             extractString(payloadSection, "role"),
                             extractString(payloadSection, "rol")
                     );
-                    if (role != null && role.equalsIgnoreCase("PRESTADOR")) {
-                        Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
-                        if (userId == null) {
-                            log.warn("user_updated sin userId/id: {}", payloadSection);
+                    Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
+                    if (userId == null) {
+                        log.warn("user_updated sin userId/id: {}", payloadSection);
+                    } else {
+                        var existenteOpt = prestadorSyncService.buscarPorUsuarioId(userId);
+                        boolean esPrestador = role != null && role.equalsIgnoreCase("PRESTADOR");
+                        if (!esPrestador && existenteOpt.isEmpty()) {
+                            log.info("user_updated ignorado: sin rol PRESTADOR ni prestador existente. userId={}", userId);
                         } else {
                             PrestadorDTO dto = buildPrestadorDTOFromUserEvent(safePayload, payloadSection);
                             dto.setId(userId);
-                            dto.setEstado("ACTIVO");
+                            dto.setEstado(esPrestador ? "ACTIVO" : existenteOpt.map(Prestador::getEstado).orElse("ACTIVO"));
                             prestadorSyncService.upsertDesdeDTO(dto);
                             prestadorUpsert = true;
                             prestadorIdProcesado = userId;
                         }
-                    } else {
-                        log.info("user_updated ignorado por rol: {}", role);
                     }
                 } catch (Exception e) {
                     log.error("Error procesando user_updated -> prestador", e);
@@ -339,6 +342,23 @@ public class WebhookTestController {
                     }
                 } catch (Exception e) {
                     log.error("Error procesando user_deactivated -> prestador", e);
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "user", "users")
+                    && eventMatches(eventName, "user", "rejected", "user_rejected")) {
+                try {
+                    Long userId = firstNonNull(extractLong(payloadSection, "userId"), extractLong(payloadSection, "id"));
+                    if (userId == null) {
+                        log.warn("user_rejected sin id/userId: {}", payloadSection);
+                    } else {
+                        prestadorSyncService.rechazarPorUsuarioId(userId);
+                        prestadorDesactivado = true;
+                        prestadorIdProcesado = userId;
+                    }
+                } catch (Exception e) {
+                    log.error("Error procesando user_rejected -> prestador", e);
                 }
             }
 
@@ -705,6 +725,7 @@ public class WebhookTestController {
                 .direccion(direccion != null ? direccion : "")
                 .precioHora(0.0)
                 .zonaId(zonaId)
+                .zonaIds(extractLongListFlexible(root, "zones"))
                 .habilidades(habilidades)
                 .direcciones(extractDireccionesDTO(payloadSection))
                 .build();
