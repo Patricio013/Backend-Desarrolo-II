@@ -369,7 +369,9 @@ public class CotizacionService {
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
                     "ARS",
-                    "MERCADO_PAGO"
+                    "MERCADO_PAGO",
+                    pagoDTO.getConcepto(),
+                    solicitud.getDescripcion()
             );
         } catch (Exception e) {
             log.warn("No se pudo publicar evento Pago Emitida: {}", e.toString());
