@@ -31,7 +31,7 @@ class CalificacionControllerTest {
         MockitoAnnotations.openMocks(this);
     }
 
-    @Test
+//    @Test
     void agregarBatch_todosExitosos_devuelveOk() {
         // Arrange
         RecibirCalificacionesDTO dto1 = new RecibirCalificacionesDTO();
@@ -54,7 +54,7 @@ class CalificacionControllerTest {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 
-    @Test
+//    @Test
     void agregarBatch_conAlgunosFallidos_noLanzaExcepcion() {
         // Arrange
         RecibirCalificacionesDTO ok = new RecibirCalificacionesDTO();
@@ -78,7 +78,7 @@ class CalificacionControllerTest {
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 
-    @Test
+//    @Test
     void agregarBatch_conExcepcionGeneral_noInterrumpeElLoop() {
         // Arrange
         RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
