@@ -2,6 +2,7 @@ package com.example.demo.controller;
 
 import com.example.demo.service.MatchingSubscriptionService;
 import com.example.demo.service.MatchingSubscriptionService.SubscriptionResult;
+import com.example.demo.service.MatchingSubscriptionService.AckResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -87,12 +88,12 @@ class MatchingSubscriptionControllerTest {
     @Test
     void testListSubscriptionsSuccess() throws Exception {
         when(service.listSubscriptions()).thenReturn(
-                SubscriptionResult.successList(
+                SubscriptionResult.success(null, null, HttpStatus.OK,
                         List.of(new MatchingSubscriptionService.SubscriptionDetails(
                                 "id", "url", "team", "topic", "event", "ACTIVE", null
-                        )),
-                        HttpStatus.OK
+                        ))
                 )
+
         );
 
         mockMvc.perform(get("/api/subscriptions"))
@@ -105,7 +106,7 @@ class MatchingSubscriptionControllerTest {
     @Test
     void testListSubscriptionsFailure() throws Exception {
         when(service.listSubscriptions()).thenReturn(
-                SubscriptionResult.failureList(HttpStatus.INTERNAL_SERVER_ERROR, "error")
+                SubscriptionResult.failure(null, null, HttpStatus.INTERNAL_SERVER_ERROR, "error")
         );
 
         mockMvc.perform(get("/api/subscriptions"))
@@ -118,7 +119,7 @@ class MatchingSubscriptionControllerTest {
     @Test
     void testAcknowledgeSuccess() throws Exception {
         when(service.acknowledgeMessage(eq("123"), anyString()))
-                .thenReturn(successResult);
+                .thenReturn(AckResult.success("sub-1", "123", HttpStatus.OK));
 
         mockMvc.perform(post("/api/subscriptions/ack/123")
                         .param("subscriptionId", "sub-1"))
@@ -129,7 +130,7 @@ class MatchingSubscriptionControllerTest {
     @Test
     void testAcknowledgeFailure() throws Exception {
         when(service.acknowledgeMessage(eq("123"), anyString()))
-                .thenReturn(failResult);
+                .thenReturn(AckResult.failure("sub-1", "123", HttpStatus.INTERNAL_SERVER_ERROR, "error"));
 
         mockMvc.perform(post("/api/subscriptions/ack/123")
                         .param("subscriptionId", "sub-1"))

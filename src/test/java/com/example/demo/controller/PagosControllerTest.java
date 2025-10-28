@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.http.ResponseEntity;
+import java.math.BigDecimal;
 
 import java.util.List;
 
@@ -33,20 +34,18 @@ class PagosControllerTest {
     @Test
     void crearSolicitudPago_deberiaRetornarOk() {
         // Arrange
-        SolicitudPagoCreateDTO dto = new SolicitudPagoCreateDTO();
-        dto.setIdSolicitud(1L);
-        dto.setMonto(1500.0);
+        SolicitudPagoCreateDTO dto = new SolicitudPagoCreateDTO(1L, BigDecimal.valueOf(1500.0));
 
         SolicitudPagoDTO mockResponse = new SolicitudPagoDTO();
         mockResponse.setId(10L);
 
-        when(solicitudPagoService.crearSolicitudPago(dto)).thenReturn(mockResponse);
+        when(solicitudPagoService.create(dto)).thenReturn(mockResponse);
 
         // Act
-        ResponseEntity<SolicitudPagoDTO> response = controller.crearSolicitudPago(dto);
+        ResponseEntity<SolicitudPagoDTO> response = controller.create(dto);
 
         // Assert
-        verify(solicitudPagoService).crearSolicitudPago(dto);
+        verify(solicitudPagoService).create(dto);
         assertThat(response.getBody()).isEqualTo(mockResponse);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
@@ -61,14 +60,14 @@ class PagosControllerTest {
         SolicitudPagoDTO pago2 = new SolicitudPagoDTO();
         pago2.setId(2L);
 
-        when(solicitudPagoService.listarPagosPorPrestador(idPrestador))
+        when(solicitudPagoService.listByProvider(idPrestador))
                 .thenReturn(List.of(pago1, pago2));
 
         // Act
-        ResponseEntity<List<SolicitudPagoDTO>> response = controller.listarPagosPorPrestador(idPrestador);
+        ResponseEntity<List<SolicitudPagoDTO>> response = controller.listByProvider(idPrestador);
 
         // Assert
-        verify(solicitudPagoService).listarPagosPorPrestador(idPrestador);
+        verify(solicitudPagoService).listByProvider(idPrestador);
         assertThat(response.getBody()).hasSize(2);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
@@ -77,13 +76,13 @@ class PagosControllerTest {
     void confirmarPago_deberiaRetornarOk() {
         // Arrange
         Long idPago = 5L;
-        when(solicitudPagoService.confirmarPago(idPago)).thenReturn(true);
+        when(solicitudPagoService.confirm(idPago)).thenReturn(true);
 
         // Act
-        ResponseEntity<Boolean> response = controller.confirmarPago(idPago);
+        ResponseEntity<Boolean> response = controller.confirm(idPago);
 
         // Assert
-        verify(solicitudPagoService).confirmarPago(idPago);
+        verify(solicitudPagoService).confirm(idPago);
         assertThat(response.getBody()).isTrue();
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
@@ -92,13 +91,13 @@ class PagosControllerTest {
     void confirmarPago_devuelveFalseCuandoFalla() {
         // Arrange
         Long idPago = 9L;
-        when(solicitudPagoService.confirmarPago(idPago)).thenReturn(false);
+        when(solicitudPagoService.confirm(idPago)).thenReturn(false);
 
         // Act
-        ResponseEntity<Boolean> response = controller.confirmarPago(idPago);
+        ResponseEntity<Boolean> response = controller.confirm(idPago);
 
         // Assert
-        verify(solicitudPagoService).confirmarPago(idPago);
+        verify(solicitudPagoService).confirm(idPago);
         assertThat(response.getBody()).isFalse();
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
@@ -107,13 +106,13 @@ class PagosControllerTest {
     void eliminarPago_deberiaInvocarServiceYRetornarOk() {
         // Arrange
         Long idPago = 15L;
-        doNothing().when(solicitudPagoService).eliminarPago(idPago);
+        doNothing().when(solicitudPagoService).delete(idPago);
 
         // Act
-        ResponseEntity<Void> response = controller.eliminarPago(idPago);
+        ResponseEntity<Void> response = controller.delete(idPago);
 
         // Assert
-        verify(solicitudPagoService).eliminarPago(idPago);
+        verify(solicitudPagoService).delete(idPago);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
     }
 }

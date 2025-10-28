@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ModuleResponse;
 import com.example.demo.dto.CotizacionesSubmit;
 import com.example.demo.dto.SolicitudAsignarDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
@@ -7,6 +8,7 @@ import com.example.demo.entity.Solicitud;
 import com.example.demo.dto.SolicitudPagoDTO;
 import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.service.CotizacionService;
+import com.example.demo.response.ModuleResponseFactory;
 import com.example.demo.service.SolicitudService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.http.ResponseEntity;
+import com.example.demo.websocket.SolicitudEventsPublisher;
 
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,9 @@ public class SolicitudControllerTest {
     @Mock
     private CotizacionService cotizacionService;
 
+    @Mock
+    private ModuleResponseFactory responseFactory;
+
     @InjectMocks
     private SolicitudController solicitudController;
 
@@ -42,78 +48,80 @@ public class SolicitudControllerTest {
 
     @Test
     void testCrearDesdeEventos() {
+        List<Solicitud> mockSolicitudes = List.of(new Solicitud());
         List<SolicitudesCreadasDTO> dtos = List.of(new SolicitudesCreadasDTO(), new SolicitudesCreadasDTO());
-        when(solicitudService.crearDesdeEventos(anyList())).thenReturn(dtos);
+        when(solicitudService.crearDesdeEventos(anyList())).thenReturn(mockSolicitudes);
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("solicitudes", "solicitudesCreadas", mockSolicitudes, null, null));
 
-        ResponseEntity<List<SolicitudesCreadasDTO>> response = solicitudController.crearDesdeEventos(dtos);
+        ResponseEntity<ModuleResponse<List<Solicitud>>> response = solicitudController.crearSolicitudes(dtos);
 
         assertEquals(200, response.getStatusCodeValue());
-        assertEquals(2, response.getBody().size());
+        assertEquals(1, response.getBody().getPayload().size());
         verify(solicitudService).crearDesdeEventos(dtos);
     }
 
     @Test
     void testCancelarPorId() {
         Long solicitudId = 5L;
-        doNothing().when(solicitudService).cancelarSolicitud(solicitudId);
+        doNothing().when(solicitudService).cancelarPorId(solicitudId);
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("solicitudes", "solicitudCancelada", Map.of("solicitudId", solicitudId, "status", "cancelled"), null, null));
 
-        ResponseEntity<Void> response = solicitudController.cancelarSolicitud(solicitudId);
+        ResponseEntity<ModuleResponse<Map<String, Object>>> response = solicitudController.cancelar(solicitudId);
 
         assertEquals(200, response.getStatusCodeValue());
-        verify(solicitudService).cancelarSolicitud(solicitudId);
+        verify(solicitudService).cancelarPorId(solicitudId);
     }
 
     @Test
     void testRecotizar() {
         Long solicitudId = 3L;
         SolicitudTop3Resultado result = new SolicitudTop3Resultado();
-        // Assuming invitarTop3 is the correct method now
-        when(solicitudService.invitarTop3(solicitudId)).thenReturn(result);
+        when(solicitudService.recotizar(solicitudId)).thenReturn(result);
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("solicitudes", "solicitudRecotizada", result, null, null));
 
-        ResponseEntity<SolicitudTop3Resultado> response = solicitudController.invitarTop3(solicitudId);
+        ResponseEntity<ModuleResponse<SolicitudTop3Resultado>> response = solicitudController.recotizarSolicitud(solicitudId);
 
         assertEquals(200, response.getStatusCodeValue());
-        assertEquals(result, response.getBody());
-        verify(solicitudService).invitarTop3(solicitudId);
+        assertEquals(result, response.getBody().getPayload());
+        verify(solicitudService).recotizar(solicitudId);
     }
 
     @Test
     void testRecibirCotizacion() {
         CotizacionesSubmit input = new CotizacionesSubmit();
         input.setSolicitudId(1L);
-        Solicitud expected = new Solicitud();
-        when(cotizacionService.createCotizacion(any(CotizacionesSubmit.class))).thenReturn(expected);
+        doNothing().when(cotizacionService).recibirCotizacion(any(CotizacionesSubmit.class));
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("cotizaciones", "cotizacionRecibida", Map.of(), null, null));
 
-        ResponseEntity<Solicitud> response = solicitudController.registrarCotizacion(input);
+        ResponseEntity<ModuleResponse<Map<String, Object>>> response = solicitudController.recibir(input);
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals(expected, response.getBody());
-        verify(cotizacionService).createCotizacion(input);
+        assertEquals(201, response.getStatusCodeValue());
+        verify(cotizacionService).recibirCotizacion(input);
     }
 
     @Test
     void testAsignarSolicitud() {
         SolicitudAsignarDTO input = new SolicitudAsignarDTO();
-        input.setCotizacionId(9L);
-        SolicitudesCreadasDTO dto = new SolicitudesCreadasDTO();
-        when(solicitudService.asignarSolicitud(any(SolicitudAsignarDTO.class))).thenReturn(dto);
+        SolicitudPagoDTO dto = new SolicitudPagoDTO();
+        when(cotizacionService.aceptarYAsignar(any(SolicitudAsignarDTO.class))).thenReturn(dto);
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("solicitudes", "solicitudAsignada", dto, null, null));
 
-        ResponseEntity<SolicitudesCreadasDTO> response = solicitudController.asignarSolicitud(input);
+        ResponseEntity<ModuleResponse<SolicitudPagoDTO>> response = solicitudController.asignar(input);
 
-        assertEquals(200, response.getStatusCodeValue());
-        assertEquals(dto, response.getBody());
-        verify(solicitudService).asignarSolicitud(input);
+        assertEquals(201, response.getStatusCodeValue());
+        assertEquals(dto, response.getBody().getPayload());
+        verify(cotizacionService).aceptarYAsignar(input);
     }
 
     @Test
     void testListarTodasComoWs() {
-        List<SolicitudesCreadasDTO> mockSolicitudes = List.of(new SolicitudesCreadasDTO(), new SolicitudesCreadasDTO());
-        when(solicitudService.listarTodas()).thenReturn(mockSolicitudes);
+        List<SolicitudEventsPublisher.WsEvent> mockWs = List.of();
+        when(solicitudService.listarTodasComoWs()).thenReturn(mockWs);
+        when(responseFactory.build(anyString(), anyString(), any())).thenReturn(new ModuleResponse<>("solicitudes", "solicitudesWsListado", mockWs, null, null));
 
-        ResponseEntity<List<SolicitudesCreadasDTO>> response = solicitudController.listarTodas();
+        ResponseEntity<ModuleResponse<List<SolicitudEventsPublisher.WsEvent>>> response = solicitudController.listarTodasComoWs();
 
         assertEquals(200, response.getStatusCodeValue());
-        assertEquals(2, response.getBody().size());
-        verify(solicitudService).listarTodas();
+        verify(solicitudService).listarTodasComoWs();
     }
 }
