@@ -5,7 +5,7 @@ import com.example.demo.dto.SolicitudAsignarDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.dto.SolicitudPagoDTO;
-import com.example.demo.response.SolicitudTop3Resultado;
+import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.service.CotizacionService;
 import com.example.demo.service.SolicitudService;
 import org.junit.jupiter.api.BeforeEach;
