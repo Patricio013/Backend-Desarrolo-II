@@ -169,7 +169,6 @@ public class WebhookTestController {
                 && (topic.equalsIgnoreCase("search.solicitud.creada") || topic.equalsIgnoreCase("solicitud"));
 
             if (payloadSection != null && isSolicitudCreadaEvento && isSolicitudCreadaTopic) {
-                // TODO(suscripciones): revisar combinación final de topic/evento cuando el proveedor lo defina
                 try {
                     SolicitudesCreadasDTO solicitudDto = objectMapper.convertValue(payloadSection, SolicitudesCreadasDTO.class);
                     if (solicitudDto.getSolicitudId() != null) {
@@ -181,6 +180,12 @@ public class WebhookTestController {
                                 break;
                             }
                         }
+                        try {
+                            var resultados = solicitudService.procesarTodasLasCreadas();
+                            log.info("Procesadas {} solicitudes en estado CREADA tras recibir evento solicitud.creada", resultados.size());
+                        } catch (Exception ex) {
+                            log.error("Error procesando backlog de solicitudes CREADA tras evento solicitud.creada", ex);
+                        }
                     }
                 } catch (IllegalArgumentException e) {
                     log.warn("No se pudo mapear payload de webhook a SolicitudesCreadasDTO: {}", e.getMessage());
@@ -191,7 +196,6 @@ public class WebhookTestController {
 
             if (payloadSection != null
                     && eventMatches(eventName, "solicitud", "cancelada", "solicitud.cancelada")) {
-                // TODO(suscripciones): ajustar filtros/topic definitivos cuando esté definido el canal real
                 Long solicitudId = extractLong(payloadSection, "solicitud_id");
                 if (solicitudId == null) {
                     solicitudCancelWarnings.add("solicitud_id ausente en evento de cancelación");
@@ -214,7 +218,6 @@ public class WebhookTestController {
             if (payloadSection != null
                     && topicMatches(topic, "cotizacion", "cotizaciones")
                     && eventMatches(eventName, "cotizacion", "aceptada", "cotizacion.aceptada")) {
-                // TODO(suscripciones): ajustar canal/tópico definitivo para eventos de cotización
                 Long solicitudId = extractLong(payloadSection, "solicitud_id");
                 Long prestadorId = extractLong(payloadSection, "prestador_id");
                 BigDecimal monto = extractBigDecimal(payloadSection, "monto");
@@ -463,7 +466,6 @@ public class WebhookTestController {
             if (payloadSection != null
                     && topicMatches(topic, "habilidad", "catalogue.habilidad.alta", "matching.habilidad.alta")
                     && eventMatches(eventName, "habilidad", "alta")) {
-                // TODO(suscripciones): revisar canal/evento definitivo para alta de habilidades
                 try {
                     HabilidadAltaWebhookDTO habilidadAlta = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
                     if (habilidadAlta.getId() == null) {
@@ -489,7 +491,6 @@ public class WebhookTestController {
             if (payloadSection != null
                     && topicMatches(topic, "habilidad", "catalogue.habilidad.modificacion", "matching.habilidad.modificacion")
                     && eventMatches(eventName, "habilidad", "modificacion", "alta_modificacion")) {
-                // TODO(suscripciones): revisar canal/evento definitivo para modificación de habilidades
                 try {
                     HabilidadAltaWebhookDTO habilidadMod = objectMapper.convertValue(payloadSection, HabilidadAltaWebhookDTO.class);
                     if (habilidadMod.getId() == null) {
@@ -886,7 +887,6 @@ public class WebhookTestController {
                 .build();
     }
 
-    @SuppressWarnings("unchecked")
     private java.util.List<Long> extractLongListFlexible(Map<String, Object> payload, String key) {
         if (payload == null) return java.util.List.of();
         Object raw = payload.get(key);
@@ -920,7 +920,6 @@ public class WebhookTestController {
         return out;
     }
 
-    @SuppressWarnings("unchecked")
     private Long extractFirstIdFromMixedList(Map<String, Object> payload, String key) {
         if (payload == null) return null;
         Object raw = payload.get(key);
@@ -938,7 +937,6 @@ public class WebhookTestController {
         try { return Long.valueOf(first.toString().trim()); } catch (Exception ignore) { return null; }
     }
 
-    @SuppressWarnings("unchecked")
     private java.util.List<Habilidad> extractHabilidadesFlexible(Map<String, Object> payload) {
         Object raw = payload != null ? payload.get("skills") : null;
         if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) return java.util.List.of();
@@ -994,7 +992,6 @@ public class WebhookTestController {
     private boolean rIdIsPresent(Object o) { return o != null && !o.toString().isBlank(); }
     private Long asLong(Object o) { return (o instanceof Number n) ? n.longValue() : Long.valueOf(o.toString().trim()); }
 
-    @SuppressWarnings("unchecked")
     private String composeDireccion(Map<String, Object> payloadSection) {
         if (payloadSection == null) return null;
         Object addrRaw = payloadSection.get("address");
@@ -1024,7 +1021,6 @@ public class WebhookTestController {
         return parts.isEmpty() ? null : String.join(", ", parts);
     }
 
-    @SuppressWarnings("unchecked")
     private java.util.List<PrestadorDireccionDTO> extractDireccionesDTO(Map<String, Object> payloadSection) {
         Object addrRaw = payloadSection != null ? payloadSection.get("address") : null;
         if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
@@ -1203,7 +1199,6 @@ public class WebhookTestController {
         return null;
     }
 
-    @SuppressWarnings("unchecked")
     private List<Short> convertToShortList(Object raw) {
         if (raw == null) {
             return null;
