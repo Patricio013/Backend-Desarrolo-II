@@ -41,8 +41,8 @@ class CalificacionControllerTest {
 
         List<RecibirCalificacionesDTO> lista = List.of(dto1, dto2);
 
-        ModuleResponse<String> mockResponse =
-                new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok");
+        ModuleResponse<Object> mockResponse =
+                new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok", null, null);
         when(responseFactory.build(any(), any(), any())).thenReturn(mockResponse);
 
         // Act
@@ -68,7 +68,7 @@ class CalificacionControllerTest {
                 .when(calificacionService).appendBatchItem(fail);
 
         when(responseFactory.build(any(), any(), any()))
-                .thenReturn(new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok"));
+                .thenReturn(new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok", null, null));
 
         // Act
         ResponseEntity<ModuleResponse<String>> response = controller.agregarBatch(lista);
@@ -88,7 +88,7 @@ class CalificacionControllerTest {
                 .when(calificacionService).appendBatchItem(any());
 
         when(responseFactory.build(any(), any(), any()))
-                .thenReturn(new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok"));
+                .thenReturn(new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok", null, null));
 
         // Act
         ResponseEntity<ModuleResponse<String>> response = controller.agregarBatch(List.of(dto));

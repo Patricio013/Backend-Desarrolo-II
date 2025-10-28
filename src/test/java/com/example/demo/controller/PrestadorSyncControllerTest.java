@@ -41,13 +41,13 @@ class PrestadorSyncControllerTest {
         prestador2.setId(2L);
         prestador2.setNombre("María López");
 
-        when(prestadorSyncService.obtenerPrestadores()).thenReturn(List.of(prestador1, prestador2));
+        when(prestadorSyncService.sync("prestadores")).thenReturn(List.of(prestador1, prestador2));
 
         // Act
-        ResponseEntity<List<PrestadorDTO>> response = controller.obtenerPrestadores();
+        ResponseEntity<List<PrestadorDTO>> response = controller.sync("prestadores");
 
         // Assert
-        verify(prestadorSyncService).obtenerPrestadores();
+        verify(prestadorSyncService).sync("prestadores");
         assertThat(response.getBody()).hasSize(2);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody().get(0).getNombre()).isEqualTo("Juan Pérez");
@@ -56,30 +56,30 @@ class PrestadorSyncControllerTest {
     @Test
     void sincronizarPrestadores_deberiaInvocarServicioYRetornarOk() {
         // Arrange
-        ModuleResponse okResponse = new ModuleResponse("OK", true);
-        when(prestadorSyncService.sincronizarPrestadores()).thenReturn(okResponse);
+        ModuleResponse<String> okResponse = new ModuleResponse<>("prestadores", "sync", "OK", null, "Sincronización completa");
+        when(prestadorSyncService.sincronizar()).thenReturn(okResponse);
 
         // Act
-        ResponseEntity<ModuleResponse> response = controller.sincronizarPrestadores();
+        ResponseEntity<ModuleResponse<String>> response = controller.sincronizar();
 
         // Assert
-        verify(prestadorSyncService).sincronizarPrestadores();
+        verify(prestadorSyncService).sincronizar();
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
-        assertThat(response.getBody().getMessage()).isEqualTo("OK");
+        assertThat(response.getBody().getMessage()).isEqualTo("Sincronización completa");
     }
 
     @Test
     void sincronizarPrestadores_deberiaManejarExcepcionYRetornarError() {
         // Arrange
-        when(prestadorSyncService.sincronizarPrestadores()).thenThrow(new RuntimeException("Error de conexión"));
+        when(prestadorSyncService.sincronizar()).thenThrow(new RuntimeException("Error de conexión"));
 
         // Act
-        ResponseEntity<ModuleResponse> response = controller.sincronizarPrestadores();
+        ResponseEntity<ModuleResponse<String>> response = controller.sincronizar();
 
         // Assert
-        verify(prestadorSyncService).sincronizarPrestadores();
+        verify(prestadorSyncService).sincronizar();
         assertThat(response.getStatusCode().is5xxServerError()).isTrue();
-        assertThat(response.getBody().getMessage()).contains("Error");
+        assertThat(response.getBody().getMessage()).contains("Error de conexión");
     }
 
     @Test
@@ -90,13 +90,13 @@ class PrestadorSyncControllerTest {
         dto.setId(idPrestador);
         dto.setNombre("Pedro Sync");
 
-        when(prestadorSyncService.obtenerPrestadorPorId(idPrestador)).thenReturn(dto);
+        when(prestadorSyncService.syncById("prestadores", idPrestador)).thenReturn(dto);
 
         // Act
-        ResponseEntity<PrestadorDTO> response = controller.obtenerPrestadorPorId(idPrestador);
+        ResponseEntity<PrestadorDTO> response = controller.syncById("prestadores", idPrestador);
 
         // Assert
-        verify(prestadorSyncService).obtenerPrestadorPorId(idPrestador);
+        verify(prestadorSyncService).syncById("prestadores", idPrestador);
         assertThat(response.getStatusCode().is2xxSuccessful()).isTrue();
         assertThat(response.getBody().getNombre()).isEqualTo("Pedro Sync");
     }
@@ -105,13 +105,13 @@ class PrestadorSyncControllerTest {
     void obtenerPrestadorPorId_devuelveNotFoundSiNoExiste() {
         // Arrange
         Long idPrestador = 9L;
-        when(prestadorSyncService.obtenerPrestadorPorId(idPrestador)).thenReturn(null);
+        when(prestadorSyncService.syncById("prestadores", idPrestador)).thenReturn(null);
 
         // Act
-        ResponseEntity<PrestadorDTO> response = controller.obtenerPrestadorPorId(idPrestador);
+        ResponseEntity<PrestadorDTO> response = controller.syncById("prestadores", idPrestador);
 
         // Assert
-        verify(prestadorSyncService).obtenerPrestadorPorId(idPrestador);
+        verify(prestadorSyncService).syncById("prestadores", idPrestador);
         assertThat(response.getStatusCode().is4xxClientError()).isTrue();
         assertThat(response.getBody()).isNull();
     }
