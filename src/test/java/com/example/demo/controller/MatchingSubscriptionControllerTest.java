@@ -1,6 +1,7 @@
 package com.example.demo.controller;
 
 import com.example.demo.service.MatchingSubscriptionService;
+import com.example.demo.service.MatchingSubscriptionService.SubscriptionListResult;
 import com.example.demo.service.MatchingSubscriptionService.SubscriptionResult;
 import com.example.demo.service.MatchingSubscriptionService.AckResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -87,11 +88,11 @@ class MatchingSubscriptionControllerTest {
     // --- GET /api/subscriptions ---
 //    @Test
     void testListSubscriptionsSuccess() throws Exception {
-        when(service.listSubscriptions()).thenReturn(
-                SubscriptionResult.success(null, null, HttpStatus.OK,
+        when(service.listSubscriptions()).thenReturn(SubscriptionListResult.success(
+                HttpStatus.OK,
                         List.of(new MatchingSubscriptionService.SubscriptionDetails(
                                 "id", "url", "team", "topic", "event", "ACTIVE", null
-                        ))
+                        )), "Success"
                 )
 
         );
@@ -105,9 +106,7 @@ class MatchingSubscriptionControllerTest {
 
 //    @Test
     void testListSubscriptionsFailure() throws Exception {
-        when(service.listSubscriptions()).thenReturn(
-                SubscriptionResult.failure(null, null, HttpStatus.INTERNAL_SERVER_ERROR, "error")
-        );
+        when(service.listSubscriptions()).thenReturn(SubscriptionListResult.failure(HttpStatus.INTERNAL_SERVER_ERROR, "error"));
 
         mockMvc.perform(get("/api/subscriptions"))
                 .andExpect(status().isInternalServerError())
@@ -119,7 +118,7 @@ class MatchingSubscriptionControllerTest {
 //    @Test
     void testAcknowledgeSuccess() throws Exception {
         when(service.acknowledgeMessage(eq("123"), anyString()))
-                .thenReturn(AckResult.success("sub-1", "123", HttpStatus.OK));
+                .thenReturn(AckResult.success(HttpStatus.OK, "Acknowledged"));
 
         mockMvc.perform(post("/api/subscriptions/ack/123")
                         .param("subscriptionId", "sub-1"))
@@ -130,7 +129,7 @@ class MatchingSubscriptionControllerTest {
 //    @Test
     void testAcknowledgeFailure() throws Exception {
         when(service.acknowledgeMessage(eq("123"), anyString()))
-                .thenReturn(AckResult.failure("sub-1", "123", HttpStatus.INTERNAL_SERVER_ERROR, "error"));
+                .thenReturn(AckResult.failure(HttpStatus.INTERNAL_SERVER_ERROR, "error"));
 
         mockMvc.perform(post("/api/subscriptions/ack/123")
                         .param("subscriptionId", "sub-1"))

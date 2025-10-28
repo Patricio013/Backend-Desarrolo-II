@@ -54,41 +54,35 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería registrar una calificación correctamente")
     void testRegistrarCalificacion_Success() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(1L);
-        dto.setIdUsuario(10L);
-        dto.setPuntaje(5);
-        dto.setComentario("Excelente servicio");
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 1L, 10L, 5, "Excelente servicio");
 
         Solicitud solicitud = new Solicitud();
         solicitud.setId(1L);
 
         Usuario usuario = new Usuario();
-        usuario.setUserId(10L);
+        usuario.setId(10L);
 
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(solicitud));
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(usuario));
         when(solicitudRepository.save(any(Solicitud.class))).thenReturn(solicitud);
 
-        ModuleResponse result = calificacionService.registrarCalificacion(dto);
+        ModuleResponse<String> result = calificacionService.appendBatchItem(dto);
 
         assertNotNull(result);
-        assertEquals("OK", result.getStatus());
-        assertTrue(result.getMessage().contains("registrada"));
-        verify(solicitudRepository, times(1)).save(solicitud);
+        assertEquals("calificaciones", result.module());
+        assertTrue(result.message().contains("procesada"));
+        verify(solicitudRepository, times(1)).save(any(Solicitud.class));
     }
 
     @Test
     @DisplayName("Debería fallar si la solicitud no existe")
     void testRegistrarCalificacion_SolicitudNoEncontrada() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(99L);
-        dto.setIdUsuario(10L);
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 99L, 10L, 5, "test");
 
         when(solicitudRepository.findById(99L)).thenReturn(Optional.empty());
 
         Exception ex = assertThrows(RuntimeException.class, () ->
-                calificacionService.registrarCalificacion(dto)
+                calificacionService.appendBatchItem(dto)
         );
 
         assertTrue(ex.getMessage().toLowerCase().contains("solicitud"));
@@ -98,10 +92,7 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería fallar si el usuario no existe")
     void testRegistrarCalificacion_UsuarioNoEncontrado() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(1L);
-        dto.setIdUsuario(999L);
-
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 1L, 999L, 5, "test");
         Solicitud solicitud = new Solicitud();
         solicitud.setId(1L);
 
@@ -109,7 +100,7 @@ class CalificacionServiceTest {
         when(usuarioRepository.findById(999L)).thenReturn(Optional.empty());
 
         Exception ex = assertThrows(RuntimeException.class, () ->
-                calificacionService.registrarCalificacion(dto)
+                calificacionService.appendBatchItem(dto)
         );
 
         assertTrue(ex.getMessage().toLowerCase().contains("usuario"));
@@ -119,21 +110,19 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería manejar error de base de datos al guardar")
     void testRegistrarCalificacion_ErrorAlGuardar() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(1L);
-        dto.setIdUsuario(10L);
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 1L, 10L, 5, "test");
 
         Solicitud solicitud = new Solicitud();
         solicitud.setId(1L);
         Usuario usuario = new Usuario();
-        usuario.setUserId(10L);
+        usuario.setId(10L);
 
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(solicitud));
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(usuario));
         when(solicitudRepository.save(any(Solicitud.class))).thenThrow(new RuntimeException("DB error"));
 
         Exception ex = assertThrows(RuntimeException.class, () ->
-                calificacionService.registrarCalificacion(dto)
+                calificacionService.appendBatchItem(dto)
         );
 
         assertTrue(ex.getMessage().contains("DB error"));
@@ -147,7 +136,7 @@ class CalificacionServiceTest {
     @DisplayName("Debería lanzar error si el DTO es nulo")
     void testRegistrarCalificacion_NullDto() {
         Exception ex = assertThrows(IllegalArgumentException.class, () ->
-                calificacionService.registrarCalificacion(null)
+                calificacionService.appendBatchItem(null)
         );
         assertTrue(ex.getMessage().contains("DTO"));
         verifyNoInteractions(solicitudRepository, usuarioRepository);
@@ -156,13 +145,10 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería lanzar error si el puntaje es inválido")
     void testRegistrarCalificacion_PuntajeInvalido() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(1L);
-        dto.setIdUsuario(10L);
-        dto.setPuntaje(7); // fuera de rango 1-5
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 1L, 10L, 7, "test"); // puntaje fuera de rango 1-5
 
         Exception ex = assertThrows(IllegalArgumentException.class, () ->
-                calificacionService.registrarCalificacion(dto)
+                calificacionService.appendBatchItem(dto)
         );
 
         assertTrue(ex.getMessage().contains("puntaje"));
@@ -172,23 +158,20 @@ class CalificacionServiceTest {
     @Test
     @DisplayName("Debería aceptar comentarios vacíos pero válidos")
     void testRegistrarCalificacion_ComentarioVacio() {
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setIdSolicitud(1L);
-        dto.setIdUsuario(10L);
-        dto.setPuntaje(3);
-        dto.setComentario("");
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(1L, 1L, 10L, 3, "");
 
         Solicitud solicitud = new Solicitud();
         solicitud.setId(1L);
         Usuario usuario = new Usuario();
-        usuario.setUserId(10L);
+        usuario.setId(10L);
 
         when(solicitudRepository.findById(1L)).thenReturn(Optional.of(solicitud));
         when(usuarioRepository.findById(10L)).thenReturn(Optional.of(usuario));
 
-        ModuleResponse result = calificacionService.registrarCalificacion(dto);
+        ModuleResponse<String> result = calificacionService.appendBatchItem(dto);
 
-        assertEquals("OK", result.getStatus());
+        assertNotNull(result);
+        assertEquals("calificaciones", result.module());
         verify(solicitudRepository, times(1)).save(any(Solicitud.class));
     }
 
@@ -204,7 +187,7 @@ class CalificacionServiceTest {
 
         when(solicitudRepository.findById(2L)).thenReturn(Optional.of(solicitud));
 
-        var result = calificacionService.obtenerCalificaciones(2L);
+        var result = calificacionService.obtenerCalificacionesPorSolicitud(2L);
 
         assertNotNull(result);
         assertTrue(result.isEmpty());
@@ -216,7 +199,7 @@ class CalificacionServiceTest {
         when(solicitudRepository.findById(5L)).thenReturn(Optional.empty());
 
         Exception ex = assertThrows(RuntimeException.class, () ->
-                calificacionService.obtenerCalificaciones(5L)
+                calificacionService.obtenerCalificacionesPorSolicitud(5L)
         );
 
         assertTrue(ex.getMessage().contains("solicitud"));

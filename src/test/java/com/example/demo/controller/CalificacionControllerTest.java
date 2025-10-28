@@ -34,12 +34,8 @@ class CalificacionControllerTest {
 //    @Test
     void agregarBatch_todosExitosos_devuelveOk() {
         // Arrange
-        RecibirCalificacionesDTO dto1 = new RecibirCalificacionesDTO();
-        dto1.setId(1L);
-        RecibirCalificacionesDTO dto2 = new RecibirCalificacionesDTO();
-        dto2.setId(2L);
-
-        List<RecibirCalificacionesDTO> lista = List.of(dto1, dto2);
+        List<RecibirCalificacionesDTO> lista = List.of(
+                new RecibirCalificacionesDTO(1L, 1L, 1L, 5, "test"), new RecibirCalificacionesDTO(2L, 2L, 2L, 4, "test2"));
 
         ModuleResponse<Object> mockResponse =
                 new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok", null, null);
@@ -57,12 +53,8 @@ class CalificacionControllerTest {
 //    @Test
     void agregarBatch_conAlgunosFallidos_noLanzaExcepcion() {
         // Arrange
-        RecibirCalificacionesDTO ok = new RecibirCalificacionesDTO();
-        ok.setId(1L);
-        RecibirCalificacionesDTO fail = new RecibirCalificacionesDTO();
-        fail.setId(2L);
-
-        List<RecibirCalificacionesDTO> lista = List.of(ok, fail);
+        RecibirCalificacionesDTO ok = new RecibirCalificacionesDTO(1L, 1L, 1L, 5, "test");
+        RecibirCalificacionesDTO fail = new RecibirCalificacionesDTO(2L, 2L, 2L, 4, "test2");
 
         doThrow(new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Error"))
                 .when(calificacionService).appendBatchItem(fail);
@@ -71,7 +63,7 @@ class CalificacionControllerTest {
                 .thenReturn(new ModuleResponse<>("calificaciones", "calificacionesBatchProcesadas", "ok", null, null));
 
         // Act
-        ResponseEntity<ModuleResponse<String>> response = controller.agregarBatch(lista);
+        ResponseEntity<ModuleResponse<String>> response = controller.agregarBatch(List.of(ok, fail));
 
         // Assert
         verify(calificacionService, times(2)).appendBatchItem(any());
@@ -81,9 +73,7 @@ class CalificacionControllerTest {
 //    @Test
     void agregarBatch_conExcepcionGeneral_noInterrumpeElLoop() {
         // Arrange
-        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
-        dto.setId(99L);
-
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO(99L, 99L, 99L, 1, "fail");
         doThrow(new RuntimeException("Error inesperado"))
                 .when(calificacionService).appendBatchItem(any());
 

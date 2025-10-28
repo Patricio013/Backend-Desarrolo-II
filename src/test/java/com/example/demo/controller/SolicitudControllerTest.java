@@ -56,7 +56,7 @@ public class SolicitudControllerTest {
         ResponseEntity<ModuleResponse<List<Solicitud>>> response = solicitudController.crearSolicitudes(dtos);
 
         assertEquals(200, response.getStatusCodeValue());
-        assertEquals(1, response.getBody().getPayload().size());
+        assertEquals(1, response.getBody().payload.size());
         verify(solicitudService).crearDesdeEventos(dtos);
     }
 
@@ -82,7 +82,7 @@ public class SolicitudControllerTest {
         ResponseEntity<ModuleResponse<SolicitudTop3Resultado>> response = solicitudController.recotizarSolicitud(solicitudId);
 
         assertEquals(200, response.getStatusCodeValue());
-        assertEquals(result, response.getBody().getPayload());
+        assertEquals(result, response.getBody().payload);
         verify(solicitudService).recotizar(solicitudId);
     }
 
@@ -109,7 +109,7 @@ public class SolicitudControllerTest {
         ResponseEntity<ModuleResponse<SolicitudPagoDTO>> response = solicitudController.asignar(input);
 
         assertEquals(201, response.getStatusCodeValue());
-        assertEquals(dto, response.getBody().getPayload());
+        assertEquals(dto, response.getBody().payload);
         verify(cotizacionService).aceptarYAsignar(input);
     }
 
