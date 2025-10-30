@@ -1,64 +1,56 @@
-package com.example.demo.service;
+package com.example.demo.rabbit;
 
-import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.AmqpTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.test.context.ActiveProfiles;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
 
-/**
- * Test 100% compilable y autónomo:
- * - Mockea RabbitMQ (AmqpTemplate)
- * - No requiere levantar Spring
- * - Verifica el envío de mensajes
- */
+@SpringBootTest
+@ActiveProfiles("test")
 class RabbitMqIntegrationTest {
 
-    @Test
-    @DisplayName("Debe enviar un mensaje correctamente a RabbitMQ mockeado")
-    void testEnvioMensajeRabbit() {
-        // Mock del template de RabbitMQ
-        AmqpTemplate amqpTemplate = mock(AmqpTemplate.class);
+    // Mockeamos el template de AMQP que usaría cualquier servicio publisher
+    @MockBean
+    private AmqpTemplate amqpTemplate;
 
-        // Datos simulados
-        String exchange = "notificaciones.exchange";
-        String routingKey = "notificacion.cliente";
-        String mensaje = "Nueva solicitud asignada";
-
-        // Acción simulada
-        doNothing().when(amqpTemplate).convertAndSend(exchange, routingKey, mensaje);
-
-        // Ejecución del método
-        amqpTemplate.convertAndSend(exchange, routingKey, mensaje);
-
-        // Verificación
-        verify(amqpTemplate, times(1)).convertAndSend(exchange, routingKey, mensaje);
-    }
+    @Autowired
+    private AmqpTemplate injectedTemplate;
 
     @Test
-    @DisplayName("Debe capturar el mensaje exacto enviado a RabbitMQ")
-    void testCapturaMensajeRabbit() {
-        // Mock y captor
-        AmqpTemplate amqpTemplate = mock(AmqpTemplate.class);
-        ArgumentCaptor<String> exchangeCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
+    void contextLoads_y_puedoPublicarConTemplateMockeado() {
+        // sanity check: el bean está en contexto
+        assertNotNull(injectedTemplate);
 
-        // Datos
+        // Simulamos un publish básico (no importa el exchange/routingKey reales)
         String exchange = "test.exchange";
         String routingKey = "test.key";
-        String message = "Mensaje de prueba";
+        String payload = "{\"ok\":true}";
 
-        // Acción
-        amqpTemplate.convertAndSend(exchange, routingKey, message);
+        // when/then: no hace falta stubbing; verificamos que se invoque
+        injectedTemplate.convertAndSend(exchange, routingKey, payload);
 
-        // Verificación
-        verify(amqpTemplate).convertAndSend(exchangeCaptor.capture(), routingCaptor.capture(), messageCaptor.capture());
+        verify(amqpTemplate, times(1)).convertAndSend(exchange, routingKey, payload);
+        verifyNoMoreInteractions(amqpTemplate);
+    }
 
-        assertEquals(exchange, exchangeCaptor.getValue());
-        assertEquals(routingKey, routingCaptor.getValue());
-        assertEquals(message, messageCaptor.getValue());
+    /**
+     * Config extra si quisieras exponer un bean alternativo.
+     * No es estrictamente necesario porque @MockBean ya inyecta el mock.
+     */
+    @TestConfiguration
+    static class NoopConfig {
+        @Bean
+        AmqpTemplate noopAmqpTemplate() {
+            // Este bean sería “overrideado” por @MockBean, pero sirve si
+            // ejecutás el test sin @MockBean.
+            return mock(AmqpTemplate.class);
+        }
     }
 }
