@@ -38,7 +38,7 @@ public class CalificacionService {
       limpias.add(s);
     }
 
-    Prestador p = prestadorRepository.findById(item.getId())
+    Prestador p = prestadorRepository.findByExternalId(item.getId())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Prestador no encontrado: " + item.getId()));
 
     if (p.getCalificacion() == null) {

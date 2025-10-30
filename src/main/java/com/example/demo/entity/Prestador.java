@@ -14,7 +14,14 @@ import java.util.ArrayList;
 @Builder
 public class Prestador {
 
+    // ID interno autogenerado (PK)
     @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "internal_id")
+    private Long internalId;
+
+    // ID externo recibido en los mensajes
+    @Column(name = "external_id", unique = true)
     private Long id;
 
     @Column(nullable = false, length = 100)
@@ -60,6 +67,14 @@ public class Prestador {
     private List<Short> calificacion = new ArrayList<>();
 
     private Integer trabajosFinalizados;
+
+    @ElementCollection
+    @CollectionTable(
+        name = "prestador_direccion",
+        joinColumns = @JoinColumn(name = "prestador_id")
+    )
+    @Builder.Default
+    private List<PrestadorDireccion> direcciones = new ArrayList<>();
 
     public Prestador(Long id) {
         this.id = id;

@@ -43,5 +43,17 @@ public class SolicitudInvitacion {
 
     @Column(name = "enviado_at", nullable = false, columnDefinition = "timestamp default now()")
     private LocalDateTime enviadoAt;
-}
 
+    @Column(name = "rechazada", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean rechazada = false;
+
+    @Column(name = "rechazada_at")
+    private LocalDateTime rechazadaAt;
+
+    @Column(name = "rechazo_motivo", columnDefinition = "TEXT")
+    private String rechazoMotivo;
+
+    @Column(name = "cotizacion_id_externo")
+    private Long cotizacionIdExterno;
+}

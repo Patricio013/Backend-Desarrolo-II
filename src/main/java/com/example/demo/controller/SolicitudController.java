@@ -120,13 +120,18 @@ public class SolicitudController {
     }
 
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ModuleResponse<Solicitud>> obtenerDetalle(@PathVariable Long id) {
+        log.info("Obteniendo detalle de solicitud {}", id);
+        Solicitud detalle = solicitudService.obtenerDetalle(id);
+        return ResponseEntity.ok(responseFactory.build("solicitudes", "solicitudDetalle", detalle));
+    }
+
+
 
     @GetMapping("/ws")
-    public ResponseEntity<ModuleResponse<List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent>>> listarTodasComoWs() {
+    public ResponseEntity<List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent>> listarTodasComoWs() {
         log.info("Listando eventos WS de solicitudes para frontend externo");
-        return ResponseEntity.ok(responseFactory.build(
-                "solicitudes",
-                "solicitudesWsListado",
-                solicitudService.listarTodasComoWs()));
+        return ResponseEntity.ok(solicitudService.listarTodasComoWs());
     }
 }

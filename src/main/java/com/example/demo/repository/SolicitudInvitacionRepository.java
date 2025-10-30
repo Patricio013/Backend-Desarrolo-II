@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface SolicitudInvitacionRepository extends JpaRepository<SolicitudInvitacion, Long> {
 
@@ -15,5 +16,15 @@ public interface SolicitudInvitacionRepository extends JpaRepository<SolicitudIn
 
     @Query("select si.prestador.id from SolicitudInvitacion si where si.solicitud.id = :solicitudId and si.round = :round")
     List<Long> findPrestadorIdsBySolicitudAndRound(@Param("solicitudId") Long solicitudId, @Param("round") int round);
-}
 
+    Optional<SolicitudInvitacion> findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(Long solicitudId, Long prestadorId);
+
+    boolean existsBySolicitud_IdAndRoundAndRechazadaFalse(Long solicitudId, int round);
+
+    long countBySolicitud_IdAndRound(Long solicitudId, int round);
+
+    long countBySolicitud_IdAndRoundAndRechazadaTrue(Long solicitudId, int round);
+
+    @Query("select si.prestador.id from SolicitudInvitacion si where si.solicitud.id = :solicitudId")
+    List<Long> findPrestadorIdsBySolicitud(@Param("solicitudId") Long solicitudId);
+}

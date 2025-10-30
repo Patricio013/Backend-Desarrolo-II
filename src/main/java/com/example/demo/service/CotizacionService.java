@@ -16,6 +16,7 @@ import com.example.demo.websocket.SolicitudEventsPublisher;      // <-- ajustá 
 import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudRepository;
+import com.example.demo.repository.SolicitudInvitacionRepository;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,8 +32,10 @@ import org.springframework.web.server.ResponseStatusException;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -73,6 +76,12 @@ public class CotizacionService {
     @Autowired
     private SolicitudService solicitudService;
 
+    @Autowired
+    private MatchingPublisherService matchingPublisherService;
+
+    @Autowired
+    private SolicitudInvitacionRepository solicitudInvitacionRepository;
+
     @Value("${solicitudes.cotizaciones.wait-minutes:5}")
     private long waitMinutes;
 
@@ -88,18 +97,18 @@ public class CotizacionService {
     @Transactional
     public void recibirCotizacion(CotizacionesSubmit in) {
 
-        var prestador = prestadorRepository.findById(in.getPrestadorId())
+        var prestador = prestadorRepository.findByExternalId(in.getPrestadorId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Prestador no encontrado: " + in.getPrestadorId()));
 
-        var solicitud = solicitudRepository.findById(in.getSolicitudId())
+        var solicitud = solicitudRepository.findByExternalId(in.getSolicitudId())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "Solicitud no encontrada: " + in.getSolicitudId()));
 
         final int currentRound = solicitud.getCotizacionRound();
 
         var existente = cotizacionRepository
-                .findByPrestador_IdAndSolicitud_IdAndRound(in.getPrestadorId(), in.getSolicitudId(), currentRound);
+                .findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
 
         Cotizacion cotizacion;
         boolean created;
@@ -120,9 +129,10 @@ public class CotizacionService {
         cotizacion = cotizacionRepository.save(cotizacion);
 
         List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
-                .findBySolicitud_IdAndRound(solicitud.getId(), currentRound);
+                .findBySolicitud_InternalIdAndRound(solicitud.getInternalId(), currentRound);
         final int totalCotizaciones = cotizacionesSolicitud.size();
-        final boolean listoParaDespacho = totalCotizaciones == MIN_COTIZACIONES_BATCH;
+        final int objetivoCotizaciones = calcularObjetivoCotizaciones(solicitud);
+        final boolean listoParaDespacho = totalCotizaciones >= objetivoCotizaciones;
 
         if (listoParaDespacho) {
             // (1) Enviar al Core con las cotizaciones disponibles en un solo batch lógico
@@ -153,8 +163,44 @@ public class CotizacionService {
             if (!solicitud.isEsCritica() || totalCotizaciones == MIN_COTIZACIONES_BATCH) {
                 busquedasClient.indexarSolicitudCotizaciones(payload);
             }
+
+            if (created && totalCotizaciones == objetivoCotizaciones) {
+                MatchingPublisherService.PublishResult publishResult =
+                        matchingPublisherService.publishCotizaciones(solicitud, cotizacionesSolicitud, objetivoCotizaciones);
+                if (publishResult.success()) {
+                    log.info("Cotizaciones publicadas al hub messageId={} status={}",
+                            publishResult.messageId(), publishResult.status());
+                } else if (publishResult.messageId() == null) {
+                    log.debug("Publicación de cotizaciones omitida: {}", publishResult.errorMessage());
+                } else {
+                    log.warn("Publicación de cotizaciones fallida status={} error={}",
+                            publishResult.status(), publishResult.errorMessage());
+                }
+
+                Map<String, Object> details = new HashMap<>();
+                details.put("solicitudId", solicitud.getId());
+                details.put("objetivoCotizaciones", objetivoCotizaciones);
+                details.put("totalCotizaciones", totalCotizaciones);
+                details.put("cotizaciones", cotizacionesSolicitud.stream()
+                        .map(c -> Map.of(
+                                "cotizacionId", c.getId(),
+                                "prestadorId", c.getPrestador().getId(),
+                                "monto", BigDecimal.valueOf(c.getValor()),
+                                "round", c.getRound()
+                        ))
+                        .toList());
+                details.put("enviadoABusquedas", true);
+
+                solicitudEventsPublisher.notifySolicitudEvent(
+                        solicitud,
+                        "SOLICITUD_COTIZACIONES_COMPLETAS",
+                        "Cotizaciones completas",
+                        "Se alcanzó el objetivo de cotizaciones y se envió a búsquedas",
+                        details
+                );
+            }
         } else {
-            if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones)) {
+            if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones, objetivoCotizaciones)) {
                 boolean invited = solicitudService.invitarPrestadorAdicional(solicitud);
                 if (invited) {
                     log.debug("Solicitud {}: se envió invitación adicional en round {}", solicitud.getId(), currentRound);
@@ -219,8 +265,8 @@ public class CotizacionService {
         // =================================================================
     }
 
-    private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones) {
-        if (totalCotizaciones >= MIN_COTIZACIONES_BATCH) {
+    private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones, int objetivoCotizaciones) {
+        if (totalCotizaciones >= objetivoCotizaciones) {
             return false;
         }
         LocalDateTime inicio = solicitud.getCotizacionRoundStartedAt();
@@ -232,6 +278,28 @@ public class CotizacionService {
         return transcurrido.compareTo(maxWaitBeforeExtraInvite) >= 0;
     }
 
+    private int calcularObjetivoCotizaciones(Solicitud solicitud) {
+        if (solicitud.getPrestadorAsignadoId() != null) {
+            return 1;
+        }
+
+        int objetivoBase = MIN_COTIZACIONES_BATCH;
+        int round = solicitud.getCotizacionRound();
+        List<Long> invitadosRound = solicitudInvitacionRepository
+            .findPrestadorIdsBySolicitudAndRound(solicitud.getId(), round);
+        if (invitadosRound == null || invitadosRound.isEmpty()) {
+            return objetivoBase;
+        }
+        long disponibles = invitadosRound.stream()
+            .filter(Objects::nonNull)
+            .distinct()
+            .count();
+        if (disponibles <= 0) {
+            return objetivoBase;
+        }
+        return (int) Math.min(objetivoBase, disponibles);
+    }
+
     /**
      * Acepta una cotización para una solicitud, marca la solicitud como ASIGNADA
      * con el prestador indicado y genera/envía una Solicitud de Pago.
@@ -240,11 +308,11 @@ public class CotizacionService {
     public SolicitudPagoDTO aceptarYAsignar(SolicitudAsignarDTO in) {
         if (in == null) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Body requerido");
 
-        var solicitud = solicitudRepository.findById(in.getSolicitudId())
+        var solicitud = solicitudRepository.findByExternalId(in.getSolicitudId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Solicitud no encontrada: " + in.getSolicitudId()));
 
-        var prestador = prestadorRepository.findById(in.getPrestadorId())
+        var prestador = prestadorRepository.findByExternalId(in.getPrestadorId())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Prestador no encontrado: " + in.getPrestadorId()));
 
@@ -257,8 +325,7 @@ public class CotizacionService {
         }
 
         // Debe existir una cotización de ese prestador para esa solicitud
-        var opt = cotizacionRepository.findByPrestador_IdAndSolicitud_IdAndRound(
-                in.getPrestadorId(), in.getSolicitudId(), currentRound);
+        var opt = cotizacionRepository.findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(prestador.getInternalId(), solicitud.getInternalId(), currentRound);
         var cotizacion = opt.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                 "No existe cotización del prestador " + in.getPrestadorId() + " para la solicitud " + in.getSolicitudId()));
 
@@ -290,6 +357,25 @@ public class CotizacionService {
                 .build();
 
         SolicitudPagoDTO pagoDTO = solicitudPagoService.crearYEnviar(pagoIn);
+
+        try {
+            String idCorrelacion = "PED-" + (pagoDTO.getId() != null ? pagoDTO.getId() : "");
+            matchingPublisherService.publishSolicitudPagoEmitida(
+                    idCorrelacion,
+                    solicitud.getUsuarioId(),
+                    prestador.getId(),
+                    solicitud.getId(),
+                    pagoDTO.getMonto(),
+                    BigDecimal.ZERO,
+                    BigDecimal.ZERO,
+                    "ARS",
+                    "MERCADO_PAGO",
+                    pagoDTO.getConcepto(),
+                    solicitud.getDescripcion()
+            );
+        } catch (Exception e) {
+            log.warn("No se pudo publicar evento Pago Emitida: {}", e.toString());
+        }
 
         // WS: notificar aceptación y cambio de estado a ASIGNADA luego del commit
         final Long solicitudIdFinal   = solicitud.getId();

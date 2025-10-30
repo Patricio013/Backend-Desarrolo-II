@@ -16,24 +16,37 @@ import com.example.demo.entity.enums.EstadoSolicitud;
 @Builder
 public class Solicitud {
 
+    // ID interno autogenerado (PK)
     @Id
-    private Long id; // este es el "solicitud_id" que viene del Core
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "internal_id")
+    private Long internalId;
+
+    // ID externo recibido en los mensajes (solicitud_id del Core)
+    @Column(name = "external_id", unique = true)
+    private Long id;
 
     @Column(nullable = false)
-    private Long usuarioId;
+    private Long usuarioId; // externo
 
-    @Column(nullable = false)
-    private Long rubroId;
+    // Puede venir habilidad en lugar de rubro
+    private Long rubroId; // externo (opcional si llega habilidad)
+
+    // Nuevo: ID de habilidad (externo)
+    private Long habilidadId;
+
+    // Nuevo: Título de la solicitud
+    @Column(length = 200)
+    private String titulo;
 
     @Column(columnDefinition = "TEXT")
     private String descripcion;
 
     private Long prestadorAsignadoId;
 
-    // Preferencia horaria normalizada
-    private LocalDate preferenciaDia;
-    private LocalTime preferenciaDesde;
-    private LocalTime preferenciaHasta;
+    // fecha y horario (reemplaza preferencia horaria)
+    private LocalDate fecha;   // yyyy-MM-dd
+    private LocalTime horario; // HH:mm
 
     @Column(length = 20)
     private String preferenciaVentanaStr;
