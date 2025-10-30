@@ -12,12 +12,11 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * ✅ Unit test de PrestadorSyncService
- * Simula el flujo RabbitMQ con MatchingPublisherService mockeado.
+ * ✅ Test unitario para PrestadorSyncService
+ * Mockea RabbitMQ y MatchingPublisherService
  */
 class PrestadorSyncServiceTest {
 
@@ -28,7 +27,7 @@ class PrestadorSyncServiceTest {
     private MatchingPublisherService matchingPublisherService;
 
     @Mock
-    private RabbitTemplate rabbitTemplate; // simulado por si MatchingPublisher usa internamente Rabbit
+    private RabbitTemplate rabbitTemplate;
 
     @InjectMocks
     private PrestadorSyncService prestadorSyncService;
@@ -40,55 +39,47 @@ class PrestadorSyncServiceTest {
         MockitoAnnotations.openMocks(this);
         prestador = new Prestador();
         prestador.setId(1L);
-        prestador.setNombre("Carlos Pérez");
-        prestador.setEmail("carlos@example.com");
+        prestador.setNombre("Juan Pérez");
+        prestador.setEmail("juan@correo.com");
     }
 
-    // =========================================================
-    // ✅ TEST: sincronización de un prestador
-    // =========================================================
     @Test
-    @DisplayName("Debe publicar datos de prestador en RabbitMQ correctamente")
-    void testSyncPrestador_Success() {
+    @DisplayName("Debe sincronizar todos los prestadores y publicar en RabbitMQ")
+    void testSincronizarPrestadores() {
         when(prestadorRepository.findAll()).thenReturn(List.of(prestador));
 
-        prestadorSyncService.syncPrestadores();
+        // Método más probable en tu clase: sincronizar()
+        prestadorSyncService.sincronizar();
 
         verify(prestadorRepository, times(1)).findAll();
         verify(matchingPublisherService, times(1))
-                .publicarPrestador(any(Prestador.class));
+                .publicarPrestadores(anyList());
     }
 
-    // =========================================================
-    // ✅ TEST: cuando no hay prestadores en base
-    // =========================================================
     @Test
-    @DisplayName("No debe publicar si no hay prestadores disponibles")
-    void testSyncPrestador_EmptyList() {
+    @DisplayName("Debe manejar lista vacía sin publicar")
+    void testSincronizarPrestadoresVacios() {
         when(prestadorRepository.findAll()).thenReturn(List.of());
 
-        prestadorSyncService.syncPrestadores();
+        prestadorSyncService.sincronizar();
 
         verify(prestadorRepository, times(1)).findAll();
         verify(matchingPublisherService, never())
-                .publicarPrestador(any());
+                .publicarPrestadores(anyList());
     }
 
-    // =========================================================
-    // ✅ TEST: error controlado al publicar
-    // =========================================================
     @Test
-    @DisplayName("Debe manejar errores al intentar publicar un prestador")
-    void testSyncPrestador_ErrorPublicacion() {
+    @DisplayName("Debe manejar errores al publicar en RabbitMQ sin romper el flujo")
+    void testSincronizarConErrorDePublicacion() {
         when(prestadorRepository.findAll()).thenReturn(List.of(prestador));
-        doThrow(new RuntimeException("Fallo RabbitMQ"))
+        doThrow(new RuntimeException("Error al publicar en RabbitMQ"))
                 .when(matchingPublisherService)
-                .publicarPrestador(any(Prestador.class));
+                .publicarPrestadores(anyList());
 
-        prestadorSyncService.syncPrestadores();
+        prestadorSyncService.sincronizar();
 
         verify(prestadorRepository, times(1)).findAll();
         verify(matchingPublisherService, times(1))
-                .publicarPrestador(prestador);
+                .publicarPrestadores(anyList());
     }
 }
