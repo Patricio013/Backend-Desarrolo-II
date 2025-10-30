@@ -8,16 +8,18 @@ import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.springframework.web.client.RestTemplate;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Pruebas unitarias para PrestadorSyncService
- * Cubre sincronización de datos desde servicio externo (mockeado)
+ * ✅ Test unitario para PrestadorSyncService
+ * - Mockea RabbitTemplate y MatchingPublisherService
+ * - Verifica sincronización, obtención y manejo de errores
  */
 class PrestadorSyncServiceTest {
 
@@ -25,7 +27,10 @@ class PrestadorSyncServiceTest {
     private PrestadorRepository prestadorRepository;
 
     @Mock
-    private RestTemplate restTemplate;
+    private RabbitTemplate rabbitTemplate;
+
+    @Mock
+    private MatchingPublisherService matchingPublisherService;
 
     @InjectMocks
     private PrestadorSyncService prestadorSyncService;
@@ -35,83 +40,103 @@ class PrestadorSyncServiceTest {
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
+
         prestador = new Prestador();
         prestador.setId(1L);
-        prestador.setNombre("Carlos Perez");
+        prestador.setNombre("Carlos Pérez");
         prestador.setEmail("carlos@example.com");
+        prestador.setActivo(true);
     }
 
     // =========================================================
-    // ✅ SINCRONIZACIÓN EXITOSA
+    // ✅ TEST: Sincronización de un solo prestador
     // =========================================================
     @Test
-    @DisplayName("Debe sincronizar correctamente un prestador existente")
-    void testSyncPrestador_Success() {
+    @DisplayName("Debe sincronizar un prestador correctamente con RabbitMQ")
+    void testSincronizarPrestador_Success() {
+        when(prestadorRepository.findAll()).thenReturn(List.of(prestador));
+        doNothing().when(rabbitTemplate).convertAndSend(anyString(), anyString(), any());
+
+        prestadorSyncService.sincronizarPrestadores();
+
+        verify(prestadorRepository, times(1)).findAll();
+        verify(rabbitTemplate, times(1)).convertAndSend(anyString(), anyString(), any());
+    }
+
+    // =========================================================
+    // ✅ TEST: Sincronización vacía
+    // =========================================================
+    @Test
+    @DisplayName("No debe enviar mensajes si no hay prestadores")
+    void testSincronizarPrestadores_Vacio() {
+        when(prestadorRepository.findAll()).thenReturn(List.of());
+
+        prestadorSyncService.sincronizarPrestadores();
+
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any());
+    }
+
+    // =========================================================
+    // ✅ TEST: Sincronizar por ID
+    // =========================================================
+    @Test
+    @DisplayName("Debe sincronizar un prestador específico por ID")
+    void testSincronizarPorId_Success() {
         when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
+        doNothing().when(rabbitTemplate).convertAndSend(anyString(), anyString(), any());
 
-        // Mock respuesta externa (simulada)
-        Prestador apiResponse = new Prestador();
-        apiResponse.setNombre("Carlos P.");
-        apiResponse.setEmail("carlos.new@example.com");
+        prestadorSyncService.sincronizarPrestador(1L);
 
-        when(restTemplate.getForObject(anyString(), eq(Prestador.class))).thenReturn(apiResponse);
-        when(prestadorRepository.save(any(Prestador.class))).thenAnswer(inv -> inv.getArgument(0));
-
-        Prestador result = prestadorSyncService.syncPrestador(1L);
-
-        assertNotNull(result);
-        assertEquals("carlos.new@example.com", result.getEmail());
-        verify(prestadorRepository).save(any());
+        verify(prestadorRepository).findById(1L);
+        verify(rabbitTemplate).convertAndSend(anyString(), anyString(), any());
     }
 
-    // =========================================================
-    // ⚠️ PRESTADOR NO ENCONTRADO
-    // =========================================================
     @Test
-    @DisplayName("Debe lanzar excepción si el prestador no existe en la BD")
-    void testSyncPrestador_NoExiste() {
+    @DisplayName("Debe lanzar excepción si el prestador no existe al sincronizar por ID")
+    void testSincronizarPorId_NotFound() {
         when(prestadorRepository.findById(99L)).thenReturn(Optional.empty());
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> prestadorSyncService.syncPrestador(99L));
+                () -> prestadorSyncService.sincronizarPrestador(99L));
 
-        assertTrue(ex.getMessage().contains("no encontrado"));
-        verify(prestadorRepository, never()).save(any());
+        assertTrue(ex.getMessage().contains("Prestador no encontrado"));
+        verify(rabbitTemplate, never()).convertAndSend(anyString(), anyString(), any());
     }
 
     // =========================================================
-    // ❌ ERROR DE SERVICIO EXTERNO
+    // ✅ TEST: Publicación hacia MatchingPublisherService
     // =========================================================
     @Test
-    @DisplayName("Debe manejar error del servicio externo")
-    void testSyncPrestador_ErrorExterno() {
-        when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
-        when(restTemplate.getForObject(anyString(), eq(Prestador.class)))
-                .thenThrow(new RuntimeException("API no disponible"));
+    @DisplayName("Debe publicar correctamente al servicio de matching")
+    void testPublicarAlMatchingService_Success() {
+        when(prestadorRepository.findAll()).thenReturn(List.of(prestador));
+        doNothing().when(matchingPublisherService).enviarPrestador(any(Prestador.class));
 
-        RuntimeException ex = assertThrows(RuntimeException.class,
-                () -> prestadorSyncService.syncPrestador(1L));
+        prestadorSyncService.publicarAlMatchingService();
 
-        assertTrue(ex.getMessage().contains("API no disponible"));
-        verify(prestadorRepository, never()).save(any());
+        verify(matchingPublisherService, times(1)).enviarPrestador(prestador);
+    }
+
+    @Test
+    @DisplayName("Debe ignorar la publicación si no hay prestadores")
+    void testPublicarAlMatchingService_SinPrestadores() {
+        when(prestadorRepository.findAll()).thenReturn(List.of());
+
+        prestadorSyncService.publicarAlMatchingService();
+
+        verify(matchingPublisherService, never()).enviarPrestador(any());
     }
 
     // =========================================================
-    // 💾 VERIFICAR QUE GUARDA CAMBIOS
+    // ✅ TEST: Manejo de excepciones en RabbitMQ
     // =========================================================
     @Test
-    @DisplayName("Debe guardar los cambios del prestador sincronizado")
-    void testSyncPrestador_GuardaCambios() {
-        when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
+    @DisplayName("Debe manejar excepciones al enviar mensajes RabbitMQ")
+    void testManejoExcepcionRabbitMQ() {
+        when(prestadorRepository.findAll()).thenReturn(List.of(prestador));
+        doThrow(new RuntimeException("Error RabbitMQ")).when(rabbitTemplate)
+                .convertAndSend(anyString(), anyString(), any());
 
-        Prestador actualizado = new Prestador();
-        actualizado.setNombre("Carlos Actualizado");
-        actualizado.setEmail("nuevo@mail.com");
-
-        when(restTemplate.getForObject(anyString(), eq(Prestador.class))).thenReturn(actualizado);
-
-        prestadorSyncService.syncPrestador(1L);
-
-        verify(prestadorRepository, times(1)).save(any(Prestador.class));
+        assertDoesNotThrow(() -> prestadorSyncService.sincronizarPrestadores());
     }
 }
