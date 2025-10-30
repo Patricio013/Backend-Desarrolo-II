@@ -1,16 +1,17 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.Calificacion;
-import com.example.demo.entity.Solicitud;
-import com.example.demo.repository.CalificacionRepository;
-import com.example.demo.repository.SolicitudRepository;
+import com.example.demo.dto.RecibirCalificacionesDTO;
+import com.example.demo.entity.Prestador;
+import com.example.demo.repository.PrestadorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,46 +21,99 @@ import static org.mockito.Mockito.*;
 class CalificacionServiceTest {
 
     @Mock
-    private CalificacionRepository calificacionRepository;
-
-    @Mock
-    private SolicitudRepository solicitudRepository;
+    private PrestadorRepository prestadorRepository;
 
     @InjectMocks
     private CalificacionService calificacionService;
 
-    private Solicitud solicitud;
+    private Prestador prestador;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        solicitud = new Solicitud();
-        solicitud.setId(1L);
+        prestador = new Prestador();
+        prestador.setId(1L);
+        prestador.setCalificacion(new ArrayList<>());
+        prestador.setTrabajosFinalizados(3);
     }
 
     @Test
-    @DisplayName("✅ Debe obtener calificaciones por ID de solicitud")
-    void testObtenerCalificacionesPorSolicitud() {
-        Calificacion c1 = new Calificacion();
-        c1.setId(1L);
-        c1.setPuntaje(4);
-        c1.setComentario("Muy bueno");
+    @DisplayName("Debe agregar calificaciones válidas correctamente")
+    void testAppendBatchItem_Success() {
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(1L);
+        dto.setPuntuaciones(List.of((short) 4, (short) 5));
 
-        solicitud.setCalificaciones(List.of(c1));
-        when(solicitudRepository.findById(1L)).thenReturn(Optional.of(solicitud));
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
 
-        List<Calificacion> result = calificacionService.obtenerCalificaciones(1L);
+        calificacionService.appendBatchItem(dto);
 
-        assertNotNull(result);
-        assertEquals(1, result.size());
-        assertEquals(4, result.get(0).getPuntaje());
-        verify(solicitudRepository, times(1)).findById(1L);
+        assertEquals(2, prestador.getCalificacion().size());
+        verify(prestadorRepository, times(1)).save(prestador);
     }
 
     @Test
-    @DisplayName("❌ Debe lanzar excepción si la solicitud no existe")
-    void testObtenerCalificaciones_SolicitudNoExiste() {
-        when(solicitudRepository.findById(99L)).thenReturn(Optional.empty());
-        assertThrows(IllegalArgumentException.class, () -> calificacionService.obtenerCalificaciones(99L));
+    @DisplayName("Debe lanzar error si el DTO es nulo o sin ID")
+    void testAppendBatchItem_NullItemOrId() {
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(null));
+
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(null);
+        dto.setPuntuaciones(List.of((short) 5));
+
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
+        verify(prestadorRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar error si las puntuaciones son vacías")
+    void testAppendBatchItem_EmptyScores() {
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(1L);
+        dto.setPuntuaciones(new ArrayList<>());
+
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
+        verify(prestadorRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar error si el prestador no existe")
+    void testAppendBatchItem_PrestadorNoExiste() {
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(999L);
+        dto.setPuntuaciones(List.of((short) 5));
+
+        when(prestadorRepository.findByExternalId(999L)).thenReturn(Optional.empty());
+
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
+        verify(prestadorRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar error si se exceden los trabajos finalizados")
+    void testAppendBatchItem_ExcedeTrabajosFinalizados() {
+        prestador.setTrabajosFinalizados(2);
+
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(1L);
+        dto.setPuntuaciones(List.of((short) 4, (short) 5, (short) 3));
+
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
+
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
+        verify(prestadorRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Debe lanzar error si hay puntuaciones fuera de rango")
+    void testAppendBatchItem_PuntuacionFueraDeRango() {
+        RecibirCalificacionesDTO dto = new RecibirCalificacionesDTO();
+        dto.setId(1L);
+        dto.setPuntuaciones(List.of((short) 6));
+
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
+
+        assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
+        verify(prestadorRepository, never()).save(any());
     }
 }
