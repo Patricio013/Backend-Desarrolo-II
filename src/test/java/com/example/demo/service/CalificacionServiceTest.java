@@ -44,7 +44,7 @@ class CalificacionServiceTest {
         dto.setId(1L);
         dto.setPuntuaciones(List.of((short) 4, (short) 5));
 
-        when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
 
         calificacionService.appendBatchItem(dto);
 
@@ -83,7 +83,7 @@ class CalificacionServiceTest {
         dto.setId(999L);
         dto.setPuntuaciones(List.of((short) 5));
 
-        when(prestadorRepository.findById(999L)).thenReturn(Optional.empty());
+        when(prestadorRepository.findByExternalId(999L)).thenReturn(Optional.empty());
 
         assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
         verify(prestadorRepository, never()).save(any());
@@ -98,7 +98,7 @@ class CalificacionServiceTest {
         dto.setId(1L);
         dto.setPuntuaciones(List.of((short) 4, (short) 5, (short) 3));
 
-        when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
 
         assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
         verify(prestadorRepository, never()).save(any());
@@ -111,7 +111,7 @@ class CalificacionServiceTest {
         dto.setId(1L);
         dto.setPuntuaciones(List.of((short) 6));
 
-        when(prestadorRepository.findById(1L)).thenReturn(Optional.of(prestador));
+        when(prestadorRepository.findByExternalId(1L)).thenReturn(Optional.of(prestador));
 
         assertThrows(ResponseStatusException.class, () -> calificacionService.appendBatchItem(dto));
         verify(prestadorRepository, never()).save(any());
