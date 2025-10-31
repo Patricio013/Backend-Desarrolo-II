@@ -153,7 +153,7 @@ class CotizacionServiceTest {
         when(cotizacionRepository.save(any(Cotizacion.class))).thenReturn(c1);
         when(cotizacionRepository.findBySolicitud_InternalIdAndRound(any(), anyInt())).thenReturn(cotizacionesCompletas);
         when(solicitudInvitacionRepository.findPrestadorIdsBySolicitudAndRound(any(), anyInt())).thenReturn(List.of(1L, 2L, 3L)); // Objetivo es 3
-        when(matchingPublisherService.publishCotizaciones(any(), any(), anyInt())).thenReturn(new MatchingPublisherService.PublishResult(true, "msg-123", 200, null));
+        when(matchingPublisherService.publishCotizaciones(any(), any(), anyInt())).thenReturn(new MatchingPublisherService.PublishResult("msg-123", true, HttpStatus.OK, null));
 
         cotizacionService.recibirCotizacion(cotizacionSubmit);
 
@@ -273,7 +273,7 @@ class CotizacionServiceTest {
         when(cotizacionRepository.findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(any(), any(), anyInt()))
                 .thenReturn(Optional.of(cotizacion));
 
-        ResponseStatusException exception = assertThrows(Response.class,
+        ResponseStatusException exception = assertThrows(ResponseStatusException.class,
                 () -> cotizacionService.aceptarYAsignar(asignarDTO));
 
         assertEquals(HttpStatus.BAD_REQUEST, exception.getStatusCode());
