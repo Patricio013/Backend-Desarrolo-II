@@ -65,7 +65,11 @@ class SolicitudPagoServiceTest {
         SolicitudPago spPendiente = SolicitudPago.builder().id(1L).estado(EstadoSolicitudPago.PENDIENTE).build();
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenReturn(spPendiente);
 
-        PagoEnvioResponse pagoResponse = new PagoEnvioResponse(true, "ext-pago-123");
+        PagoEnvioResponse pagoResponse = PagoEnvioResponse.builder()
+                .aceptado(true)
+                .externoId("ext-pago-123")
+                .mensaje("OK")
+                .build();
         when(pagosClient.enviarSolicitudPago(any(SolicitudPagoDTO.class))).thenReturn(pagoResponse);
 
         Solicitud solicitudAsociada = Solicitud.builder().id(100L).usuarioId(300L).descripcion("Arreglo de canilla").build();
@@ -103,7 +107,11 @@ class SolicitudPagoServiceTest {
         SolicitudPago spPendiente = SolicitudPago.builder().id(1L).estado(EstadoSolicitudPago.PENDIENTE).build();
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenReturn(spPendiente);
 
-        PagoEnvioResponse pagoResponse = new PagoEnvioResponse(false, null);
+        PagoEnvioResponse pagoResponse = PagoEnvioResponse.builder()
+                .aceptado(false)
+                .externoId(null)
+                .mensaje("Rechazado por fondos insuficientes")
+                .build();
         when(pagosClient.enviarSolicitudPago(any(SolicitudPagoDTO.class))).thenReturn(pagoResponse);
 
         when(solicitudRepository.findByExternalId(anyLong())).thenReturn(Optional.empty());
