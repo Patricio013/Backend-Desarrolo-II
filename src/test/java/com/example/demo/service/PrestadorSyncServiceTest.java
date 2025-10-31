@@ -17,6 +17,7 @@ import org.mockito.MockitoAnnotations;
 import java.util.Optional;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 /**
@@ -36,6 +37,9 @@ class PrestadorSyncServiceTest {
 
     @Mock
     private ZonaRepository zonaRepository;
+
+    @Mock
+    private MatchingPublisherService matchingPublisherService;
 
     @InjectMocks
     private PrestadorSyncService prestadorSyncService;
@@ -63,6 +67,7 @@ class PrestadorSyncServiceTest {
 
         verify(prestadorRepository, times(1)).findByExternalId(prestadorDto.getId());
         verify(prestadorRepository, times(1)).save(any(Prestador.class));
+        verify(matchingPublisherService, times(1)).publishPrestadorUpsert(any(Prestador.class));
     }
 
     @Test
@@ -77,5 +82,17 @@ class PrestadorSyncServiceTest {
 
         prestadorSyncService.upsertDesdeDTO(prestadorDto);
         verify(prestadorRepository, times(1)).save(prestadorExistente);
+        verify(matchingPublisherService, times(1)).publishPrestadorUpsert(prestadorExistente);
+    }
+
+    @Test
+    @DisplayName("No debe publicar en RabbitMQ si falla el guardado en la base de datos")
+    void testUpsertDesdeDTO_NoPublicaSiFallaGuardado() {
+        when(prestadorRepository.findByExternalId(prestadorDto.getId())).thenReturn(Optional.empty());
+        when(prestadorRepository.save(any(Prestador.class))).thenThrow(new RuntimeException("Error de base de datos"));
+
+        assertThrows(RuntimeException.class, () -> prestadorSyncService.upsertDesdeDTO(prestadorDto));
+
+        verify(matchingPublisherService, never()).publishPrestadorUpsert(any());
     }
 }
