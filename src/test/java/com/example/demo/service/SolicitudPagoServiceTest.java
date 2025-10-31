@@ -65,7 +65,7 @@ class SolicitudPagoServiceTest {
         SolicitudPago spPendiente = SolicitudPago.builder().id(1L).estado(EstadoSolicitudPago.PENDIENTE).build();
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenReturn(spPendiente);
 
-        PagoEnvioResponse pagoResponse = PagoEnvioResponse.aceptado("ext-pago-123");
+        PagoEnvioResponse pagoResponse = new PagoEnvioResponse(true, "ext-pago-123");
         when(pagosClient.enviarSolicitudPago(any(SolicitudPagoDTO.class))).thenReturn(pagoResponse);
 
         Solicitud solicitudAsociada = Solicitud.builder().id(100L).usuarioId(300L).descripcion("Arreglo de canilla").build();
@@ -103,7 +103,7 @@ class SolicitudPagoServiceTest {
         SolicitudPago spPendiente = SolicitudPago.builder().id(1L).estado(EstadoSolicitudPago.PENDIENTE).build();
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenReturn(spPendiente);
 
-        PagoEnvioResponse pagoResponse = PagoEnvioResponse.rechazado();
+        PagoEnvioResponse pagoResponse = new PagoEnvioResponse(false, null);
         when(pagosClient.enviarSolicitudPago(any(SolicitudPagoDTO.class))).thenReturn(pagoResponse);
 
         when(solicitudRepository.findByExternalId(anyLong())).thenReturn(Optional.empty());
