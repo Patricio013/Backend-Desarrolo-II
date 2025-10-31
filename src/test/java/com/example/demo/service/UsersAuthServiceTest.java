@@ -49,7 +49,9 @@ class UsersAuthServiceTest {
         ReflectionTestUtils.setField(usersAuthService, "roleClaimNames", "role,roles,authorities");
         ReflectionTestUtils.setField(usersAuthService, "adminRoleValues", "ADMIN,SUPER_ADMIN");
 
-        loginRequest = new LoginRequest("admin@test.com", "password");
+        loginRequest = new LoginRequest();
+        loginRequest.setEmail("admin@test.com");
+        loginRequest.setPassword("password");
     }
 
     private String createJwt(String role) {
