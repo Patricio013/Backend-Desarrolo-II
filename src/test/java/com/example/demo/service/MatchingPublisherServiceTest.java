@@ -56,7 +56,7 @@ class MatchingPublisherServiceTest {
         MockitoAnnotations.openMocks(this);
         // Mock the fluent API of RestClient
         when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(anyString(), any(Object[].class))).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
     }
