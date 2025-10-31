@@ -168,7 +168,7 @@ class SolicitudServiceTest {
         solicitud.setCotizacionRound(1);
         when(solicitudRepository.findByExternalId(solicitud.getId())).thenReturn(Optional.of(solicitud));
         when(habilidadRepository.findByExternalId(habilidad.getExternalId())).thenReturn(Optional.of(habilidad));
-        when(prestadorRepository.findTopByHabilidadRanked(anyLong(), any(PageRequest.class))).thenReturn(List.of(prestador));
+        when(prestadorRepository.findTopByHabilidadExcluyendoLosQueCotizaron(anyLong(), anyLong(), any(PageRequest.class))).thenReturn(List.of(prestador));
         when(solicitudInvitacionRepository.findPrestadorIdsBySolicitud(anyLong())).thenReturn(Collections.emptyList());
         when(cotizacionClient.enviarInvitacion(any())).thenReturn(true);
 
@@ -199,7 +199,7 @@ class SolicitudServiceTest {
         SolicitudInvitacion invitacion = SolicitudInvitacion.builder().solicitud(solicitud).prestador(prestador).round(2).build();
 
         when(solicitudRepository.findByExternalId(solicitud.getId())).thenReturn(Optional.of(solicitud));
-        when(solicitudInvitacionRepository.findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(solicitud.getInternalId(), prestador.getId()))
+        when(solicitudInvitacionRepository.findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(solicitud.getId(), prestador.getInternalId()))
                 .thenReturn(Optional.of(invitacion));
         when(solicitudInvitacionRepository.countBySolicitud_IdAndRound(solicitud.getInternalId(), 2)).thenReturn(3L);
         when(solicitudInvitacionRepository.countBySolicitud_IdAndRoundAndRechazadaTrue(solicitud.getInternalId(), 2)).thenReturn(3L);
