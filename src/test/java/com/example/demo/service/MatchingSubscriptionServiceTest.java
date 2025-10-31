@@ -44,14 +44,12 @@ class MatchingSubscriptionServiceTest {
 
         // Setup deep mocks for the RestClient fluent API
         when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec); // For ACK
-        when(requestBodyUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestBodySpec); // For others
+        when(requestBodyUriSpec.uri(any(String.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
 
         when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
         when(properties.subscribePath()).thenReturn("/subscriptions");
