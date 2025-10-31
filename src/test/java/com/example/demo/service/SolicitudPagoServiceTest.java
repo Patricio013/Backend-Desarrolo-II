@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.client.PagoEnvioResponse;
+import com.example.demo.client.PagoEnvioResponse;
 import com.example.demo.client.PagosClient;
 import com.example.demo.dto.SolicitudPagoCreateDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
@@ -62,14 +63,17 @@ class SolicitudPagoServiceTest {
     @DisplayName("Debe crear y enviar una solicitud de pago exitosamente")
     void testCrearYEnviar_Success() {
         // Arrange
+        List<SolicitudPago> capturedSaves = new ArrayList<>();
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenAnswer(invocation -> {
             SolicitudPago sp = invocation.getArgument(0);
+            // Clone the state at the moment of saving
+            capturedSaves.add(sp.toBuilder().build());
             if (sp.getId() == null) { // First save
                 sp.setId(1L);
             }
             return sp;
         });
-
+        
         PagoEnvioResponse pagoResponse = PagoEnvioResponse.builder()
                 .aceptado(true)
                 .externoId("ext-pago-123")
@@ -87,14 +91,13 @@ class SolicitudPagoServiceTest {
         assertNotNull(result);
         assertEquals(EstadoSolicitudPago.ENVIADA, result.getEstado());
         assertEquals("ext-pago-123", result.getExternoId());
-
-        ArgumentCaptor<SolicitudPago> captor = ArgumentCaptor.forClass(SolicitudPago.class);
-        verify(solicitudPagoRepository, times(2)).save(captor.capture());
         
-        SolicitudPago primeraGrabacion = captor.getAllValues().get(0);
+        verify(solicitudPagoRepository, times(2)).save(any(SolicitudPago.class));
+        
+        SolicitudPago primeraGrabacion = capturedSaves.get(0);
         assertEquals(EstadoSolicitudPago.PENDIENTE, primeraGrabacion.getEstado());
 
-        SolicitudPago segundaGrabacion = captor.getAllValues().get(1);
+        SolicitudPago segundaGrabacion = capturedSaves.get(1);
         assertEquals(EstadoSolicitudPago.ENVIADA, segundaGrabacion.getEstado());
         assertEquals("ext-pago-123", segundaGrabacion.getExternoId());
 
