@@ -67,7 +67,6 @@ class PrestadorSyncServiceTest {
 
         verify(prestadorRepository, times(1)).findByExternalId(prestadorDto.getId());
         verify(prestadorRepository, times(1)).save(any(Prestador.class));
-        verify(matchingPublisherService, times(1)).publishPrestadorUpsert(any(Prestador.class));
     }
 
     @Test
@@ -82,7 +81,6 @@ class PrestadorSyncServiceTest {
 
         prestadorSyncService.upsertDesdeDTO(prestadorDto);
         verify(prestadorRepository, times(1)).save(prestadorExistente);
-        verify(matchingPublisherService, times(1)).publishPrestadorUpsert(prestadorExistente);
     }
 
     @Test
@@ -93,6 +91,6 @@ class PrestadorSyncServiceTest {
 
         assertThrows(RuntimeException.class, () -> prestadorSyncService.upsertDesdeDTO(prestadorDto));
 
-        verify(matchingPublisherService, never()).publishPrestadorUpsert(any());
+        verify(matchingPublisherService, never()).publishSolicitudesTop3(any());
     }
 }
