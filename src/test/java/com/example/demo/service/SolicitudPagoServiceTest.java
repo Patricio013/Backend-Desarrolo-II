@@ -20,6 +20,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -67,7 +69,19 @@ class SolicitudPagoServiceTest {
         when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenAnswer(invocation -> {
             SolicitudPago sp = invocation.getArgument(0);
             // Clone the state at the moment of saving
-            capturedSaves.add(sp.toBuilder().build());
+            SolicitudPago clone = SolicitudPago.builder()
+                    .id(sp.getId())
+                    .solicitudId(sp.getSolicitudId())
+                    .ordenId(sp.getOrdenId())
+                    .prestadorId(sp.getPrestadorId())
+                    .cotizacionId(sp.getCotizacionId())
+                    .monto(sp.getMonto())
+                    .concepto(sp.getConcepto())
+                    .vencimiento(sp.getVencimiento())
+                    .estado(sp.getEstado())
+                    .externoId(sp.getExternoId())
+                    .build();
+            capturedSaves.add(clone);
             if (sp.getId() == null) { // First save
                 sp.setId(1L);
             }
