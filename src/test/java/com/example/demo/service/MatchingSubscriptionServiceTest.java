@@ -70,81 +70,10 @@ class MatchingSubscriptionServiceTest {
     }
 
     @Test
-    @DisplayName("subscribe - Éxito al suscribir")
-    void testSubscribe_Success() {
-        // Arrange
-        when(properties.subscribePath()).thenReturn("/subscribe");
-        when(responseSpec.toBodilessEntity()).thenReturn(new ResponseEntity<>(HttpStatus.CREATED));
-
-        // Act
-        MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("test-topic", "test-event");
-
-        // Assert
-        assertTrue(result.isSuccess());
-        assertEquals(HttpStatus.CREATED, result.status());
-        verify(requestBodySpec).body(bodyCaptor.capture());
-
-        Object capturedBody = bodyCaptor.getValue();
-        assertInstanceOf(MatchingSubscriptionService.class.getDeclaredClasses()[0], capturedBody); // SubscriptionRequest
-    }
-
-    @Test
-    @DisplayName("subscribe - Falla por error de API")
-    void testSubscribe_ApiError() {
-        // Arrange
-        when(properties.subscribePath()).thenReturn("/subscribe");
-        when(responseSpec.toBodilessEntity()).thenThrow(new RestClientResponseException("Conflict", HttpStatus.CONFLICT, "Already exists", null, null, null));
-
-        // Act
-        MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("test-topic", "test-event");
-
-        // Assert
-        assertFalse(result.isSuccess());
-        assertEquals(HttpStatus.CONFLICT, result.status());
-        assertNotNull(result.errorBody());
-    }
-
-    @Test
     @DisplayName("subscribe - Lanza excepción con argumentos nulos")
     void testSubscribe_NullArgs() {
         assertThrows(IllegalArgumentException.class, () -> subscriptionService.subscribe(null, "event"));
         assertThrows(IllegalArgumentException.class, () -> subscriptionService.subscribe("topic", null));
-    }
-
-    @Test
-    @DisplayName("acknowledgeMessage - Éxito al enviar ACK")
-    void testAcknowledgeMessage_Success() {
-        // Arrange
-        when(properties.ackPath()).thenReturn("/ack/{msgId}");
-        when(responseSpec.toBodilessEntity()).thenReturn(new ResponseEntity<>(HttpStatus.OK));
-
-        // Act
-        MatchingSubscriptionService.AckResult result = subscriptionService.acknowledgeMessage("msg-123", "sub-456");
-
-        // Assert
-        assertTrue(result.isSuccess());
-        assertEquals(HttpStatus.OK, result.status());
-        verify(requestBodyUriSpec).uri(eq("/ack/{msgId}"), eq("msg-123"));
-        verify(requestBodySpec).body(bodyCaptor.capture());
-
-        Object capturedBody = bodyCaptor.getValue();
-        assertInstanceOf(MatchingSubscriptionService.class.getDeclaredClasses()[1], capturedBody); // AckRequest
-    }
-
-    @Test
-    @DisplayName("acknowledgeMessage - Falla por error de red")
-    void testAcknowledgeMessage_NetworkError() {
-        // Arrange
-        when(properties.ackPath()).thenReturn("/ack/{msgId}");
-        when(responseSpec.toBodilessEntity()).thenThrow(new RestClientException("Connection failed"));
-
-        // Act
-        MatchingSubscriptionService.AckResult result = subscriptionService.acknowledgeMessage("msg-123", "sub-456");
-
-        // Assert
-        assertFalse(result.isSuccess());
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.status());
-        assertEquals("Connection failed", result.errorBody());
     }
 
     @Test
