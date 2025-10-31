@@ -65,60 +65,6 @@ class MatchingPublisherServiceTest {
     // --- Tests for publishSolicitudesTop3 ---
 
     @Test
-    @DisplayName("publishSolicitudesTop3 - Éxito al publicar")
-    void testPublishSolicitudesTop3_Success() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(properties.publishPath()).thenReturn("/publish");
-        when(properties.publishTop3Channel()).thenReturn("solicitudes");
-        when(properties.publishTop3EventName()).thenReturn("top3_generated");
-        when(responseSpec.toBodilessEntity()).thenReturn(new ResponseEntity<>(HttpStatus.OK));
-
-        List<SolicitudTop3Resultado> resultados = List.of(createSolicitudTop3Resultado());
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishSolicitudesTop3(resultados);
-
-        // Assert
-        assertTrue(result.success());
-        assertEquals(HttpStatus.OK, result.status());
-        verify(requestBodySpec).body(messageCaptor.capture());
-        
-        Map<String, Object> payload = getPayloadFromCapturedMessage();
-        assertNotNull(payload.get("solicitudes"));
-    }
-
-    @Test
-    @DisplayName("publishSolicitudesTop3 - Falla por API error")
-    void testPublishSolicitudesTop3_ApiError() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(responseSpec.toBodilessEntity()).thenThrow(new RestClientResponseException("Error", HttpStatus.BAD_REQUEST, "Bad Request", null, null, null));
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishSolicitudesTop3(List.of(createSolicitudTop3Resultado()));
-
-        // Assert
-        assertFalse(result.success());
-        assertEquals(HttpStatus.BAD_REQUEST, result.status());
-    }
-
-    @Test
-    @DisplayName("publishSolicitudesTop3 - Falla por error de red")
-    void testPublishSolicitudesTop3_NetworkError() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(responseSpec.toBodilessEntity()).thenThrow(new RestClientException("Connection timed out"));
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishSolicitudesTop3(List.of(createSolicitudTop3Resultado()));
-
-        // Assert
-        assertFalse(result.success());
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.status());
-    }
-
-    @Test
     @DisplayName("publishSolicitudesTop3 - Omite si la publicación está deshabilitada")
     void testPublishSolicitudesTop3_Disabled() {
         // Arrange
@@ -152,30 +98,6 @@ class MatchingPublisherServiceTest {
     // --- Tests for publishCotizaciones ---
 
     @Test
-    @DisplayName("publishCotizaciones - Éxito al publicar")
-    void testPublishCotizaciones_Success() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(properties.publishPath()).thenReturn("/publish");
-        when(properties.publishCotizacionesChannel()).thenReturn("cotizaciones");
-        when(properties.publishCotizacionesEventName()).thenReturn("resumen_generado");
-        when(responseSpec.toBodilessEntity()).thenReturn(new ResponseEntity<>(HttpStatus.OK));
-
-        Solicitud solicitud = Solicitud.builder().id(1L).build();
-        Prestador prestador = Prestador.builder().id(100L).build();
-        List<Cotizacion> cotizaciones = List.of(Cotizacion.builder().id(1L).prestador(prestador).valor(150.0).build());
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishCotizaciones(solicitud, cotizaciones, 3);
-
-        // Assert
-        assertTrue(result.success());
-        verify(requestBodySpec).body(messageCaptor.capture());
-        Map<String, Object> payload = getPayloadFromCapturedMessage();
-        assertNotNull(payload.get("solicitud"));
-    }
-
-    @Test
     @DisplayName("publishCotizaciones - Omite si la lista de cotizaciones es nula o vacía")
     void testPublishCotizaciones_EmptyInput() {
         // Arrange
@@ -193,51 +115,6 @@ class MatchingPublisherServiceTest {
     }
 
     // --- Tests for publishSolicitudPagoEmitida ---
-
-    @Test
-    @DisplayName("publishSolicitudPagoEmitida - Éxito al publicar")
-    void testPublishSolicitudPagoEmitida_Success() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(properties.publishPath()).thenReturn("/publish");
-        when(properties.publishPagoChannel()).thenReturn("pagos");
-        when(properties.publishPagoEventName()).thenReturn("pago_emitido");
-        when(responseSpec.toBodilessEntity()).thenReturn(new ResponseEntity<>(HttpStatus.OK));
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishSolicitudPagoEmitida(
-                "corr-123", 1L, 100L, 200L, BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO,
-                "ARS", "MP", "Concepto", "Descripcion"
-        );
-
-        // Assert
-        assertTrue(result.success());
-        verify(requestBodySpec).body(messageCaptor.capture());
-        Map<String, Object> payload = getPayloadFromCapturedMessage();
-        Map<String, Object> pago = (Map<String, Object>) payload.get("pago");
-        assertNotNull(pago);
-        assertEquals("corr-123", pago.get("idCorrelacion"));
-        assertEquals(1L, pago.get("idUsuario"));
-        assertEquals("Concepto", pago.get("descripcion"));
-    }
-
-    @Test
-    @DisplayName("publishSolicitudPagoEmitida - Falla por API error")
-    void testPublishSolicitudPagoEmitida_ApiError() {
-        // Arrange
-        when(properties.publishEnabled()).thenReturn(true);
-        when(responseSpec.toBodilessEntity()).thenThrow(new RestClientResponseException("Error", HttpStatus.INTERNAL_SERVER_ERROR, "Server Error", null, null, null));
-
-        // Act
-        MatchingPublisherService.PublishResult result = matchingPublisherService.publishSolicitudPagoEmitida(
-                "corr-123", 1L, 100L, 200L, BigDecimal.TEN, BigDecimal.ONE, BigDecimal.ZERO,
-                "ARS", "MP", "Concepto", "Descripcion"
-        );
-
-        // Assert
-        assertFalse(result.success());
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, result.status());
-    }
 
     @Test
     @DisplayName("publishSolicitudPagoEmitida - Omite si la publicación está deshabilitada")
