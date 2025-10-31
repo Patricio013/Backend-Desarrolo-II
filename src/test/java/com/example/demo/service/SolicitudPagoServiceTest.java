@@ -62,8 +62,13 @@ class SolicitudPagoServiceTest {
     @DisplayName("Debe crear y enviar una solicitud de pago exitosamente")
     void testCrearYEnviar_Success() {
         // Arrange
-        SolicitudPago spPendiente = SolicitudPago.builder().id(1L).estado(EstadoSolicitudPago.PENDIENTE).build();
-        when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenReturn(spPendiente);
+        when(solicitudPagoRepository.save(any(SolicitudPago.class))).thenAnswer(invocation -> {
+            SolicitudPago sp = invocation.getArgument(0);
+            if (sp.getId() == null) { // First save
+                sp.setId(1L);
+            }
+            return sp;
+        });
 
         PagoEnvioResponse pagoResponse = PagoEnvioResponse.builder()
                 .aceptado(true)
