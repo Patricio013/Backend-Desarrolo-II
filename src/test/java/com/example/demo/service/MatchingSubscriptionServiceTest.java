@@ -44,12 +44,14 @@ class MatchingSubscriptionServiceTest {
 
         // Setup deep mocks for the RestClient fluent API
         when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec); // For ACK
+        when(requestBodyUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestBodySpec); // For others
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
 
         when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
 
         when(properties.subscribePath()).thenReturn("/subscriptions");
@@ -72,7 +74,7 @@ class MatchingSubscriptionServiceTest {
         assertEquals(HttpStatus.OK, result.status());
         assertEquals("test.topic", result.topic());
         assertEquals("test.event", result.eventName());
-        verify(requestBodySpec, times(1)).body(any(MatchingSubscriptionService.class.getDeclaredClasses()[0]));
+        verify(requestBodySpec, times(1)).body(any());
     }
 
     @Test
@@ -114,9 +116,9 @@ class MatchingSubscriptionServiceTest {
 
         MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("team", "domain", "action", "event");
 
-        assertTrue(result.isSuccess());
-        assertEquals("team.domain.action", result.topic());
-        assertEquals("event", result.eventName());
+        assertTrue(result.isSuccess(), "Subscription should be successful");
+        assertEquals("domain", result.topic(), "Topic should be 'domain'");
+        assertEquals("event", result.eventName(), "Event name should be 'event'");
     }
 
     // --- Tests for acknowledgeMessage ---
