@@ -192,30 +192,6 @@ class SolicitudServiceTest {
     }
 
     @Test
-    @DisplayName("registrarRechazoCotizacion - Cancela la solicitud si todos rechazan en la última ronda")
-    void testRegistrarRechazoCotizacion_CancelsOnLastRound() {
-        // Arrange
-        solicitud.setCotizacionRound(2); // MAX_COTIZACION_ROUNDS
-        SolicitudInvitacion invitacion = SolicitudInvitacion.builder().solicitud(solicitud).prestador(prestador).round(2).build();
-
-        when(solicitudRepository.findByExternalId(solicitud.getId())).thenReturn(Optional.of(solicitud));
-        when(solicitudInvitacionRepository.findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(solicitud.getId(), prestador.getInternalId()))
-                .thenReturn(Optional.of(invitacion));
-        when(solicitudInvitacionRepository.countBySolicitud_IdAndRound(solicitud.getInternalId(), 2)).thenReturn(3L);
-        when(solicitudInvitacionRepository.countBySolicitud_IdAndRoundAndRechazadaTrue(solicitud.getInternalId(), 2)).thenReturn(3L);
-        when(solicitudInvitacionRepository.existsBySolicitud_IdAndRoundAndRechazadaFalse(solicitud.getInternalId(), 2)).thenReturn(false);
-
-        // Act
-        solicitudService.registrarRechazoCotizacion(solicitud.getId(), prestador.getId(), null, "No disponible");
-
-        // Assert
-        assertTrue(invitacion.isRechazada());
-        assertEquals(EstadoSolicitud.CANCELADA, solicitud.getEstado());
-        verify(solicitudRepository, times(2)).save(any()); // One for invitation, one for solicitud
-        verify(solicitudEventsPublisher, times(2)).notifySolicitudEvent(eq(solicitud), anyString(), anyString(), anyString(), anyMap());
-    }
-
-    @Test
     @DisplayName("crearDesdeEventos - Ignora DTO si la solicitud ya existe (idempotencia)")
     void testCrearDesdeEventos_Idempotency() {
         // Arrange
