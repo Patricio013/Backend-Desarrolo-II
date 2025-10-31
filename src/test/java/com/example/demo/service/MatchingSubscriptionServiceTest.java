@@ -42,16 +42,20 @@ class MatchingSubscriptionServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        // Setup deep mocks for the RestClient fluent API. This is tricky.
-        // We need to ensure the chain of calls returns the next mock in the sequence.
-        lenient().when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        lenient().when(requestBodyUriSpec.uri(any(String.class))).thenReturn(requestBodySpec);
+        // --- POST ---
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
 
+        // --- GET ---
         when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
         when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+
+        // --- DELETE ---
+        when(matchingRestClient.delete()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
 
         when(properties.subscribePath()).thenReturn("/subscriptions");
         when(properties.ackPath()).thenReturn("/ack/{msgId}");
@@ -199,10 +203,8 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("unsubscribe - Debe desuscribirse correctamente")
     void testUnsubscribe_Success() {
-        RestClient.RequestHeadersSpec deleteSpec = mock(RestClient.RequestHeadersSpec.class);
-        when(matchingRestClient.delete()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(deleteSpec);
-        when(deleteSpec.retrieve()).thenReturn(responseSpec);
+        // The setup for DELETE is now in the main setUp() method.
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.noContent().build());
 
         MatchingSubscriptionService.SubscriptionResult result = subscriptionService.unsubscribe("sub-123");
