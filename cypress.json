@@ -1,0 +1,8 @@
+          "frame": "  109 |         failOnStatusCode: false,\n  110 |       }).then((response) => {\n> 111 |         expect(response.status).to.eq(502);\n      |                                    ^\n  112 |         expect(response.body).to.deep.equal({ error: 'users service unavailable' });\n  113 |       });\n  114 |     });",
+          "language": "js"
+        }
+      }
+    }
+  ],
+  "passes": []
+}
