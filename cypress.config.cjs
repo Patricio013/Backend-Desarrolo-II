@@ -2,6 +2,7 @@ const fetch = require('node-fetch')
 
 module.exports = {
   e2e: {
+    baseUrl: 'http://localhost:8080',
     setupNodeEvents(on, config) {
       on('task', {
         async burstPost({ url, times = 20 }) {
@@ -17,9 +18,6 @@ module.exports = {
         }
       })
       return config
-    },
-    env: {
-      API_BASE: 'http://localhost:8080'
     },
     supportFile: false,
     specPattern: "src/test/java/com/example/demo/cypress/e2e/**/*.cy.{js,jsx,ts,tsx}",
