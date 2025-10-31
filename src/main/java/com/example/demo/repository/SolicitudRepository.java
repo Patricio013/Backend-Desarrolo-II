@@ -4,6 +4,7 @@ import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
@@ -17,11 +18,14 @@ public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
     List<Solicitud> findByEstado(EstadoSolicitud estado);
     List<Solicitud> findByPrestadorAsignadoId(Long prestadorAsignadoId);
     Optional <Solicitud> findById(Long id);
+
+    @Query(value = "select * from solicitud s where s.external_id = :externalId", nativeQuery = true)
+    Optional<Solicitud> findByExternalId(@Param("externalId") Long externalId);
     @Query("""
         SELECT s FROM Solicitud s
         WHERE s.prestadorAsignadoId = :prestadorId
-        AND s.preferenciaDia = :dia
-        AND (s.preferenciaDesde <= :hasta AND s.preferenciaHasta >= :desde)
+        AND s.fecha = :dia
+        AND (s.horario BETWEEN :desde AND :hasta)
         AND (s.estado = 'ASIGNADA' OR s.estado = 'EN_PROGRESO')
     """)
     List<Solicitud> findAsignadasEnDiaYFranja(Long prestadorId, LocalDate dia,

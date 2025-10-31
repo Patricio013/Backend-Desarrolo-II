@@ -5,14 +5,17 @@ import com.example.demo.client.PagosClient;
 import com.example.demo.dto.SolicitudPagoCreateDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
 import com.example.demo.entity.Notificaciones;
+import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.SolicitudPago;
 import com.example.demo.entity.enums.EstadoSolicitudPago;
 import com.example.demo.repository.SolicitudPagoRepository;
+import com.example.demo.repository.SolicitudRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +23,8 @@ public class SolicitudPagoService {
 
     private final SolicitudPagoRepository repo;
     private final PagosClient pagosClient;
+    private final MatchingPublisherService matchingPublisherService;
+    private final SolicitudRepository solicitudRepository;
     private final NotificacionesService notificacionesService; // ya lo tenés
 
     @Transactional
@@ -68,6 +73,32 @@ public class SolicitudPagoService {
                         .leida(false)
                         .build()
         );
+
+        // Publicar evento para Pagos: "Solicitud Pago Emitida"
+        try {
+            Optional<Solicitud> solicitudOpt = Optional.empty();
+            if (sp.getSolicitudId() != null) {
+                solicitudOpt = solicitudRepository.findByExternalId(sp.getSolicitudId());
+            }
+            Long idUsuario = solicitudOpt.map(Solicitud::getUsuarioId).orElse(null);
+            String descripcionSolicitud = solicitudOpt.map(Solicitud::getDescripcion).orElse(null);
+            String idCorrelacion = "PED-" + (sp.getId() != null ? sp.getId() : "");
+            matchingPublisherService.publishSolicitudPagoEmitida(
+                    idCorrelacion,
+                    idUsuario,
+                    sp.getPrestadorId(),
+                    sp.getSolicitudId(),
+                    sp.getMonto(),
+                    java.math.BigDecimal.ZERO,
+                    java.math.BigDecimal.ZERO,
+                    "ARS",
+                    "MERCADO_PAGO",
+                    sp.getConcepto(),
+                    descripcionSolicitud
+            );
+        } catch (Exception e) {
+            // Do not interrupt payment creation if publishing fails
+        }
 
         return toDTO(sp);
     }

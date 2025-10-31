@@ -20,7 +20,9 @@ public class PrestadorDTO {
     private String estado;
     private Double precioHora;
     private Long zonaId;
+    private List<Long> zonaIds;
     private List<Habilidad> habilidades;
     private List<Short> calificacion;
     private Integer trabajosFinalizados;
+    private List<PrestadorDireccionDTO> direcciones;
 }
