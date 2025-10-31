@@ -42,21 +42,6 @@ class MatchingSubscriptionServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        // --- POST ---
-        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-
-        // --- GET ---
-        when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
-        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
-
-        // --- DELETE ---
-        when(matchingRestClient.delete()).thenReturn(requestHeadersUriSpec);
-        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
-
         when(properties.subscribePath()).thenReturn("/subscriptions");
         when(properties.ackPath()).thenReturn("/ack/{msgId}");
         when(properties.apiKey()).thenReturn("test-api-key");
@@ -69,6 +54,11 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("subscribe - Debe suscribirse correctamente y devolver éxito")
     void testSubscribe_Success() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.ok().build());
 
         MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("test.topic", "test.event");
@@ -83,6 +73,12 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("subscribe - Debe manejar error de API y devolver fallo")
     void testSubscribe_ApiError() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
         RestClientResponseException ex = new RestClientResponseException(
                 "Bad Request", HttpStatus.BAD_REQUEST, "Error", null, "{\"error\":\"invalid_topic\"}".getBytes(StandardCharsets.UTF_8), null);
         when(responseSpec.toBodilessEntity()).thenThrow(ex);
@@ -97,6 +93,12 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("subscribe - Debe manejar error de red y devolver fallo")
     void testSubscribe_NetworkError() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
         when(responseSpec.toBodilessEntity()).thenThrow(new RestClientException("Connection timed out"));
 
         MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("test.topic", "test.event");
@@ -115,6 +117,12 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("subscribe - Debe construir topic correctamente desde partes")
     void testSubscribe_FromParts() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
         when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.status(HttpStatus.CREATED).build());
 
         MatchingSubscriptionService.SubscriptionResult result = subscriptionService.subscribe("team", "domain", "action", "event");
@@ -129,6 +137,12 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("acknowledgeMessage - Debe enviar ACK correctamente y devolver éxito")
     void testAcknowledgeMessage_Success() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
         when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.accepted().build());
 
         MatchingSubscriptionService.AckResult result = subscriptionService.acknowledgeMessage("msg-123", "sub-456");
@@ -155,6 +169,12 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("acknowledgeMessage - Debe manejar error de API y devolver fallo")
     void testAcknowledgeMessage_ApiError() {
+        // Mocks specific to this test
+        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
         RestClientResponseException ex = new RestClientResponseException(
                 "Not Found", HttpStatus.NOT_FOUND, "Error", null, "{\"error\":\"not_found\"}".getBytes(StandardCharsets.UTF_8), null);
         when(responseSpec.toBodilessEntity()).thenThrow(ex);
@@ -171,6 +191,11 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("listSubscriptions - Debe listar suscripciones correctamente")
     void testListSubscriptions_Success() {
+        // Mocks specific to this test
+        when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+
         List<MatchingSubscriptionService.SubscriptionDetails> mockList = List.of(
                 new MatchingSubscriptionService.SubscriptionDetails("sub-1", webhookUrl, teamName, "t1", "e1", "ACTIVE", null)
         );
@@ -187,6 +212,11 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("listSubscriptions - Debe manejar error de API")
     void testListSubscriptions_ApiError() {
+        // Mocks specific to this test
+        when(matchingRestClient.get()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(anyString())).thenReturn(requestHeadersSpec);
+        when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
+
         RestClientResponseException ex = new RestClientResponseException(
                 "Forbidden", HttpStatus.FORBIDDEN, "Error", null, null, null);
         when(responseSpec.body(any(org.springframework.core.ParameterizedTypeReference.class))).thenThrow(ex);
@@ -203,7 +233,9 @@ class MatchingSubscriptionServiceTest {
     @Test
     @DisplayName("unsubscribe - Debe desuscribirse correctamente")
     void testUnsubscribe_Success() {
-        // The setup for DELETE is now in the main setUp() method.
+        // Mocks specific to this test
+        when(matchingRestClient.delete()).thenReturn(requestHeadersUriSpec);
+        when(requestHeadersUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestHeadersSpec);
         when(requestHeadersSpec.retrieve()).thenReturn(responseSpec);
         when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.noContent().build());
 
