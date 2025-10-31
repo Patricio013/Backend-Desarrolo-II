@@ -126,7 +126,11 @@ class CotizacionServiceTest {
     @DisplayName("recibirCotizacion - Crea cotización nueva y no completa el objetivo")
     void testRecibirCotizacion_CreaNueva_NoCompletaObjetivo() {
         when(cotizacionRepository.findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(any(), any(), anyInt())).thenReturn(Optional.empty());
-        when(cotizacionRepository.save(any(Cotizacion.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(cotizacionRepository.save(any(Cotizacion.class))).thenAnswer(inv -> {
+            Cotizacion c = inv.getArgument(0);
+            c.setId(999L); // Simulate saving and getting an ID
+            return c;
+        });
         when(cotizacionRepository.findBySolicitud_InternalIdAndRound(any(), anyInt())).thenReturn(List.of(new Cotizacion())); // Solo 1 cotizacion
         when(solicitudInvitacionRepository.findPrestadorIdsBySolicitudAndRound(any(), anyInt())).thenReturn(List.of(1L, 2L, 3L)); // Objetivo es 3
 
