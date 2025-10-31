@@ -59,7 +59,7 @@ class NotificacionesServiceTest {
         assertEquals(cotizacionId, captured.getCotizacionId());
         assertEquals(titulo, captured.getTitulo());
         assertEquals(mensaje, captured.getMensaje());
-        assertFalse(captured.isLeida());
+        assertFalse(captured.getLeida());
     }
 
     @Test
@@ -73,7 +73,7 @@ class NotificacionesServiceTest {
         Optional<Notificaciones> result = notificacionesService.marcarComoLeida(notificacionId);
 
         assertTrue(result.isPresent());
-        assertTrue(result.get().isLeida());
+        assertTrue(result.get().getLeida());
         verify(notificacionesRepository, times(1)).findById(notificacionId);
         verify(notificacionesRepository, times(1)).save(notificacion);
     }
