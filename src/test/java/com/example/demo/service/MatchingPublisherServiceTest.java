@@ -55,11 +55,11 @@ class MatchingPublisherServiceTest {
     void setUp() {
         MockitoAnnotations.openMocks(this);
         // Mock the fluent API of RestClient
-        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec); // For calls without URI variables
-        when(requestBodyUriSpec.uri(anyString(), any(Object[].class))).thenReturn(requestBodySpec); // For calls with URI variables
-        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        lenient().when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        lenient().when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
+        lenient().when(requestBodyUriSpec.uri(anyString(), any(Object[].class))).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
+        lenient().when(requestBodySpec.retrieve()).thenReturn(responseSpec);
     }
 
     // --- Tests for publishSolicitudesTop3 ---
