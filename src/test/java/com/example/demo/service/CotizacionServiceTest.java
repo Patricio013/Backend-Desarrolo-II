@@ -83,6 +83,7 @@ class CotizacionServiceTest {
 
         when(prestadorRepository.findByExternalId(prestador.getId())).thenReturn(Optional.of(prestador));
         when(solicitudRepository.findByExternalId(solicitud.getId())).thenReturn(Optional.of(solicitud));
+        cotizacionService.init(); // Initialize @PostConstruct fields
     }
 
     @AfterEach
@@ -144,9 +145,12 @@ class CotizacionServiceTest {
     @Test
     @DisplayName("recibirCotizacion - Completa objetivo y despacha a sistemas externos")
     void testRecibirCotizacion_CompletaObjetivo_YDespacha() {
-        Cotizacion c1 = Cotizacion.builder().prestador(prestador).valor(1500.0).build();
-        Cotizacion c2 = Cotizacion.builder().prestador(new Prestador()).valor(1600.0).build();
-        Cotizacion c3 = Cotizacion.builder().prestador(new Prestador()).valor(1700.0).build();
+        Prestador p2 = new Prestador(); p2.setId(101L);
+        Prestador p3 = new Prestador(); p3.setId(102L);
+
+        Cotizacion c1 = Cotizacion.builder().id(1L).prestador(prestador).valor(1500.0).round(1).build();
+        Cotizacion c2 = Cotizacion.builder().id(2L).prestador(p2).valor(1600.0).round(1).build();
+        Cotizacion c3 = Cotizacion.builder().id(3L).prestador(p3).valor(1700.0).round(1).build();
         List<Cotizacion> cotizacionesCompletas = List.of(c1, c2, c3);
 
         when(cotizacionRepository.findByPrestador_InternalIdAndSolicitud_InternalIdAndRound(any(), any(), anyInt())).thenReturn(Optional.empty());
