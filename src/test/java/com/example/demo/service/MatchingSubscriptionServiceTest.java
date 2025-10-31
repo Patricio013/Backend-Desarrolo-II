@@ -44,9 +44,8 @@ class MatchingSubscriptionServiceTest {
 
         // Setup deep mocks for the RestClient fluent API. This is tricky.
         // We need to ensure the chain of calls returns the next mock in the sequence.
-        when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        lenient().when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        lenient().when(requestBodyUriSpec.uri(any(java.util.function.Function.class))).thenReturn(requestBodySpec);
+        lenient().when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
+        lenient().when(requestBodyUriSpec.uri(any(String.class))).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
 
