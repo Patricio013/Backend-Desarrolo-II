@@ -50,7 +50,6 @@ class MatchingSubscriptionServiceTest {
 
         // Common mock chain for POST
         when(matchingRestClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString(), any(Object[].class))).thenReturn(requestBodySpec);
         when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
         when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
         when(requestBodySpec.retrieve()).thenReturn(responseSpec);
@@ -125,7 +124,7 @@ class MatchingSubscriptionServiceTest {
         // Assert
         assertTrue(result.isSuccess());
         assertEquals(HttpStatus.OK, result.status());
-        verify(requestBodyUriSpec).uri("/ack/msg-123");
+        verify(requestBodyUriSpec).uri(eq("/ack/{msgId}"), eq("msg-123"));
         verify(requestBodySpec).body(bodyCaptor.capture());
 
         Object capturedBody = bodyCaptor.getValue();
