@@ -871,7 +871,7 @@ public class WebhookTestController {
 
         Long zonaId = extractFirstIdFromMixedList(root, "zones");
 
-        java.util.List<Habilidad> habilidades = extractHabilidadesFlexible(root);
+        java.util.List<Habilidad> habilidades = extractHabilidadesFlexible(payloadSection != null ? payloadSection : root);
 
         return PrestadorDTO.builder()
                 .nombre(firstName != null ? firstName : "")
@@ -938,7 +938,13 @@ public class WebhookTestController {
     }
 
     private java.util.List<Habilidad> extractHabilidadesFlexible(Map<String, Object> payload) {
-        Object raw = payload != null ? payload.get("skills") : null;
+        Object raw = null;
+        if (payload != null) {
+            raw = payload.get("skills");
+            if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+                raw = payload.get("habilidades");
+            }
+        }
         if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) return java.util.List.of();
         java.util.List<Habilidad> out = new java.util.ArrayList<>();
         for (Object item : list) {
@@ -954,20 +960,16 @@ public class WebhookTestController {
                 else if (idVal != null) {
                     try { h.setId(Long.valueOf(idVal.toString().trim())); } catch (Exception ignore) {}
                 }
-                Object nameVal = m.get("name");
+                Object nameVal = firstNonNullObj(m.get("name"), m.get("nombre"));
                 if (nameVal != null) h.setNombre(nameVal.toString());
-                // rubroId puede venir como rubroId, idRubro, rubro.id
+                // rubroId puede venir como rubroId, idRubro, id_rubro, rubro.id
                 Long rubroId = null;
-                Object rid = m.get("rubroId");
+                Object rid = firstNonNullObj(m.get("rubroId"), m.get("idRubro"), m.get("id_rubro"));
                 if (rIdIsPresent(rid)) rubroId = asLong(rid);
-                if (rubroId == null) {
-                    Object rid2 = m.get("idRubro");
-                    if (rIdIsPresent(rid2)) rubroId = asLong(rid2);
-                }
                 if (rubroId == null) {
                     Object rubroObj = m.get("rubro");
                     if (rubroObj instanceof java.util.Map<?, ?> rmap) {
-                        Object inner = rmap.get("id");
+                        Object inner = firstNonNullObj(rmap.get("id"), rmap.get("externalId"), rmap.get("id_rubro"));
                         if (rIdIsPresent(inner)) rubroId = asLong(inner);
                     }
                 }
@@ -991,10 +993,25 @@ public class WebhookTestController {
 
     private boolean rIdIsPresent(Object o) { return o != null && !o.toString().isBlank(); }
     private Long asLong(Object o) { return (o instanceof Number n) ? n.longValue() : Long.valueOf(o.toString().trim()); }
+    private Object firstNonNullObj(Object... values) {
+        if (values == null) return null;
+        for (Object value : values) {
+            if (value == null) continue;
+            if (value instanceof String s) {
+                if (!s.isBlank()) return value;
+            } else {
+                return value;
+            }
+        }
+        return null;
+    }
 
     private String composeDireccion(Map<String, Object> payloadSection) {
         if (payloadSection == null) return null;
-        Object addrRaw = payloadSection.get("address");
+        Object addrRaw = payloadSection.get("addresses");
+        if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
+            addrRaw = payloadSection.get("address");
+        }
         if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
             return null;
         }
@@ -1022,7 +1039,13 @@ public class WebhookTestController {
     }
 
     private java.util.List<PrestadorDireccionDTO> extractDireccionesDTO(Map<String, Object> payloadSection) {
-        Object addrRaw = payloadSection != null ? payloadSection.get("address") : null;
+        Object addrRaw = null;
+        if (payloadSection != null) {
+            addrRaw = payloadSection.get("addresses");
+            if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
+                addrRaw = payloadSection.get("address");
+            }
+        }
         if (!(addrRaw instanceof java.util.List<?> list) || list.isEmpty()) {
             return java.util.List.of();
         }
