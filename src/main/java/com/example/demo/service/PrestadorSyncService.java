@@ -31,8 +31,9 @@ public class PrestadorSyncService {
 
   @Transactional(propagation = Propagation.REQUIRES_NEW)
   public Prestador upsertDesdeDTO(PrestadorDTO dto) {
-    // 1) Zona
-    Zona zona = resolveZona(dto);
+    // 1) Zonas
+    List<Zona> zonas = resolveZonas(dto);
+    Zona zonaPrincipal = zonas.isEmpty() ? null : zonas.get(0);
 
     // 2) Habilidades (resolver existentes o crear)
     List<Habilidad> habilidades = null;
@@ -51,9 +52,17 @@ public class PrestadorSyncService {
     String estado = dto.getEstado() != null ? dto.getEstado() : p.getEstado();
     p.setEstado(estado != null ? estado : "ACTIVO");
     p.setPrecioHora(dto.getPrecioHora());
-    if (zona != null) {
-      p.setZona(zona);
+    if (zonaPrincipal != null) {
+      p.setZona(zonaPrincipal);
+    } else {
+      p.setZona(null);
     }
+    if (p.getZonas() == null) {
+      p.setZonas(new ArrayList<>());
+    } else {
+      p.getZonas().clear();
+    }
+    p.getZonas().addAll(zonas);
 
     // calificaciones (defensivo)
     if (p.getCalificacion() == null) {
@@ -192,15 +201,15 @@ public class PrestadorSyncService {
         ));
   }
 
-  private Zona resolveZona(PrestadorDTO dto) {
+  private List<Zona> resolveZonas(PrestadorDTO dto) {
     List<Long> zonaIds = dto.getZonaIds();
     if ((zonaIds == null || zonaIds.isEmpty()) && dto.getZonaId() != null) {
       zonaIds = List.of(dto.getZonaId());
     }
     if (zonaIds == null || zonaIds.isEmpty()) {
-      return null;
+      return List.of();
     }
-    Zona primary = null;
+    List<Zona> zonas = new ArrayList<>();
     for (Long externalId : zonaIds) {
       if (externalId == null) {
         continue;
@@ -212,10 +221,8 @@ public class PrestadorSyncService {
                   .nombre("Zona " + externalId)
                   .build()
           ));
-      if (primary == null) {
-        primary = zona;
-      }
+      zonas.add(zona);
     }
-    return primary;
+    return zonas;
   }
 }

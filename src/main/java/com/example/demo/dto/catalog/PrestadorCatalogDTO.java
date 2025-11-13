@@ -30,6 +30,7 @@ public class PrestadorCatalogDTO {
     Integer trabajosFinalizados;
     List<Short> calificacion;
     ZonaInfo zona;
+    List<ZonaInfo> zonas;
     List<HabilidadInfo> habilidades;
     List<PrestadorDireccionDTO> direcciones;
 
@@ -50,6 +51,7 @@ public class PrestadorCatalogDTO {
                 .trabajosFinalizados(prestador.getTrabajosFinalizados())
                 .calificacion(copyCalificaciones(prestador.getCalificacion()))
                 .zona(ZonaInfo.from(prestador.getZona()))
+                .zonas(buildZonas(prestador))
                 .habilidades(buildHabilidades(prestador))
                 .direcciones(buildDirecciones(prestador))
                 .build();
@@ -118,6 +120,16 @@ public class PrestadorCatalogDTO {
             unique.putIfAbsent(key, dto);
         }
         return List.copyOf(unique.values());
+    }
+
+    private static List<ZonaInfo> buildZonas(Prestador prestador) {
+        if (prestador.getZonas() == null || prestador.getZonas().isEmpty()) {
+            return List.of();
+        }
+        return prestador.getZonas().stream()
+                .filter(Objects::nonNull)
+                .map(ZonaInfo::from)
+                .toList();
     }
 
     @Value

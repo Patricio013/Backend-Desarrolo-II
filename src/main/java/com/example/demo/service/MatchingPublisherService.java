@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.config.MatchingIntegrationProperties;
+import com.example.demo.controller.SolicitudController;
 import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.entity.Cotizacion;
@@ -117,16 +118,44 @@ public class MatchingPublisherService {
         out.put("solicitudId", resultado.getSolicitudId());
         out.put("descripcion", resultado.getDescripcion());
         out.put("usuarioId", resultado.getUsuarioId());
+        out.put("fecha", resultado.getFecha());
         out.put("horario", resultado.getHorario());
         out.put("estado", resultado.getEstado());
         out.put("fueCotizada", resultado.getFueCotizada());
         out.put("esCritica", resultado.getEsCritica());
+        Map<String, Object> direccion = buildDireccion(resultado);
+        if (direccion != null) {
+            out.put("direccion", direccion);
+        }
         List<InvitacionCotizacionDTO> top3 = resultado.getTop3();
         out.put("top3", top3 == null ? List.of() : top3.stream()
                 .filter(Objects::nonNull)
                 .map(this::mapInvitacion)
                 .toList());
         return out;
+    }
+
+    private Map<String, Object> buildDireccion(SolicitudController.SolicitudTop3Resultado resultado) {
+        boolean hasData =
+                resultado.getDireccionProvincia() != null ||
+                resultado.getDireccionCiudad() != null ||
+                resultado.getDireccionCalle() != null ||
+                resultado.getDireccionNumero() != null ||
+                resultado.getDireccionPiso() != null ||
+                resultado.getDireccionDepto() != null ||
+                resultado.getDireccionCodigoPostal() != null;
+        if (!hasData) {
+            return null;
+        }
+        Map<String, Object> direccion = new LinkedHashMap<>();
+        direccion.put("provincia", resultado.getDireccionProvincia());
+        direccion.put("ciudad", resultado.getDireccionCiudad());
+        direccion.put("calle", resultado.getDireccionCalle());
+        direccion.put("numero", resultado.getDireccionNumero());
+        direccion.put("piso", resultado.getDireccionPiso());
+        direccion.put("depto", resultado.getDireccionDepto());
+        direccion.put("codigoPostal", resultado.getDireccionCodigoPostal());
+        return direccion;
     }
 
     private Map<String, Object> mapInvitacion(InvitacionCotizacionDTO invitacion) {

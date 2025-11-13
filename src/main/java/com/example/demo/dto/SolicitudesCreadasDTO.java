@@ -51,6 +51,9 @@ public class SolicitudesCreadasDTO {
     @JsonProperty("estado")
     private String estado;
 
+    @JsonProperty("direccion")
+    private DireccionDTO direccion;
+
     @JsonProperty("preferencia_horaria")
     private PreferenciaHorariaDTO preferenciaHoraria;
 
@@ -58,5 +61,32 @@ public class SolicitudesCreadasDTO {
     public static class PreferenciaHorariaDTO {
         private String dia;      // "2025-09-12"
         private String ventana;  // "09:00-13:00"
+    }
+
+    @Data
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class DireccionDTO {
+        private Long id;
+
+        @JsonAlias({"provincia", "state"})
+        private String provincia;
+
+        @JsonAlias({"ciudad", "city"})
+        private String ciudad;
+
+        @JsonAlias({"calle", "street"})
+        private String calle;
+
+        @JsonAlias({"numero", "number"})
+        private String numero;
+
+        @JsonAlias({"piso", "floor"})
+        private String piso;
+
+        @JsonAlias({"depto", "apartment"})
+        private String depto;
+
+        @JsonAlias({"codigo_postal", "zip", "postalCode"})
+        private String codigoPostal;
     }
 }

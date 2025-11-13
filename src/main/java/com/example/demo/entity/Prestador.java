@@ -51,6 +51,15 @@ public class Prestador {
 
     @ManyToMany
     @JoinTable(
+        name = "prestador_zona",
+        joinColumns = @JoinColumn(name = "prestador_id"),
+        inverseJoinColumns = @JoinColumn(name = "zona_id")
+    )
+    @Builder.Default
+    private List<Zona> zonas = new ArrayList<>();
+
+    @ManyToMany
+    @JoinTable(
     name = "prestador_habilidad",
     joinColumns = @JoinColumn(name = "prestador_id"),
     inverseJoinColumns = @JoinColumn(name = "habilidad_id")

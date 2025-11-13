@@ -35,6 +35,28 @@ public class Solicitud {
     // Nuevo: ID de habilidad (externo)
     private Long habilidadId;
 
+    // Dirección detallada
+    @Column(length = 100)
+    private String direccionProvincia;
+
+    @Column(length = 100)
+    private String direccionCiudad;
+
+    @Column(length = 150)
+    private String direccionCalle;
+
+    @Column(length = 50)
+    private String direccionNumero;
+
+    @Column(length = 50)
+    private String direccionPiso;
+
+    @Column(length = 50)
+    private String direccionDepto;
+
+    @Column(length = 50)
+    private String direccionCodigoPostal;
+
     // Nuevo: Título de la solicitud
     @Column(length = 200)
     private String titulo;

@@ -73,10 +73,34 @@ public class SolicitudController {
         public void setSolicitudId(Long solicitudId) { this.solicitudId = solicitudId; }
         public Long getUsuarioId() { return usuarioId; }
         public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
+        public java.time.LocalDate getFecha() { return fecha; }
+        public void setFecha(java.time.LocalDate fecha) { this.fecha = fecha; }
         public java.time.LocalTime getHorario() { return horario; }
         public void setHorario(java.time.LocalTime horario) { this.horario = horario; }
+        public String getDireccionProvincia() { return direccionProvincia; }
+        public void setDireccionProvincia(String direccionProvincia) { this.direccionProvincia = direccionProvincia; }
+        public String getDireccionCiudad() { return direccionCiudad; }
+        public void setDireccionCiudad(String direccionCiudad) { this.direccionCiudad = direccionCiudad; }
+        public String getDireccionCalle() { return direccionCalle; }
+        public void setDireccionCalle(String direccionCalle) { this.direccionCalle = direccionCalle; }
+        public String getDireccionNumero() { return direccionNumero; }
+        public void setDireccionNumero(String direccionNumero) { this.direccionNumero = direccionNumero; }
+        public String getDireccionPiso() { return direccionPiso; }
+        public void setDireccionPiso(String direccionPiso) { this.direccionPiso = direccionPiso; }
+        public String getDireccionDepto() { return direccionDepto; }
+        public void setDireccionDepto(String direccionDepto) { this.direccionDepto = direccionDepto; }
+        public String getDireccionCodigoPostal() { return direccionCodigoPostal; }
+        public void setDireccionCodigoPostal(String direccionCodigoPostal) { this.direccionCodigoPostal = direccionCodigoPostal; }
         private Long usuarioId;
+        private java.time.LocalDate fecha;
         private java.time.LocalTime horario;
+        private String direccionProvincia;
+        private String direccionCiudad;
+        private String direccionCalle;
+        private String direccionNumero;
+        private String direccionPiso;
+        private String direccionDepto;
+        private String direccionCodigoPostal;
         public String getDescripcion() { return descripcion; }
         public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
         public String getEstado() { return estado; }

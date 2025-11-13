@@ -221,7 +221,15 @@ public class SolicitudService {
             SolicitudTop3Resultado out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
             out.setUsuarioId(solicitud.getUsuarioId());
+            out.setFecha(solicitud.getFecha());
             out.setHorario(solicitud.getHorario());
+            out.setDireccionProvincia(solicitud.getDireccionProvincia());
+            out.setDireccionCiudad(solicitud.getDireccionCiudad());
+            out.setDireccionCalle(solicitud.getDireccionCalle());
+            out.setDireccionNumero(solicitud.getDireccionNumero());
+            out.setDireccionPiso(solicitud.getDireccionPiso());
+            out.setDireccionDepto(solicitud.getDireccionDepto());
+            out.setDireccionCodigoPostal(solicitud.getDireccionCodigoPostal());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name());
             out.setFueCotizada(solicitud.isFueCotizada());
@@ -260,7 +268,15 @@ public class SolicitudService {
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
         out.setUsuarioId(solicitud.getUsuarioId());
+        out.setFecha(solicitud.getFecha());
         out.setHorario(solicitud.getHorario());
+        out.setDireccionProvincia(solicitud.getDireccionProvincia());
+        out.setDireccionCiudad(solicitud.getDireccionCiudad());
+        out.setDireccionCalle(solicitud.getDireccionCalle());
+        out.setDireccionNumero(solicitud.getDireccionNumero());
+        out.setDireccionPiso(solicitud.getDireccionPiso());
+        out.setDireccionDepto(solicitud.getDireccionDepto());
+        out.setDireccionCodigoPostal(solicitud.getDireccionCodigoPostal());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
         out.setFueCotizada(solicitud.isFueCotizada());
@@ -274,6 +290,14 @@ public class SolicitudService {
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
+        out.setFecha(solicitud.getFecha());
+        out.setDireccionProvincia(solicitud.getDireccionProvincia());
+        out.setDireccionCiudad(solicitud.getDireccionCiudad());
+        out.setDireccionCalle(solicitud.getDireccionCalle());
+        out.setDireccionNumero(solicitud.getDireccionNumero());
+        out.setDireccionPiso(solicitud.getDireccionPiso());
+        out.setDireccionDepto(solicitud.getDireccionDepto());
+        out.setDireccionCodigoPostal(solicitud.getDireccionCodigoPostal());
         out.setDescripcion(solicitud.getDescripcion());
 
         if (p == null) {
@@ -627,7 +651,7 @@ public class SolicitudService {
                     ? prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(rubroFallback, solicitudExternalId, page)
                     : prestadorRepository.findTopByRubroRanked(rubroFallback, page);
                 agregarCandidatos(seleccion, seleccionados, porRubro, solicitud, maxInicial, excluidos);
-            }
+        }
         }
 
         return seleccion;
@@ -754,6 +778,17 @@ public class SolicitudService {
                 
                 b.preferenciaVentanaStr(ph.getVentana());
             }
+        }
+
+        var direccion = e.getDireccion();
+        if (direccion != null) {
+            b.direccionProvincia(direccion.getProvincia());
+            b.direccionCiudad(direccion.getCiudad());
+            b.direccionCalle(direccion.getCalle());
+            b.direccionNumero(direccion.getNumero());
+            b.direccionPiso(direccion.getPiso());
+            b.direccionDepto(direccion.getDepto());
+            b.direccionCodigoPostal(direccion.getCodigoPostal());
         }
 
         Solicitud creada = solicitudRepository.save(b.build());

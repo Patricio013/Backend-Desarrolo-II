@@ -62,6 +62,16 @@ INSERT INTO prestador (internal_id, external_id, nombre, apellido, email, telefo
   (106, 106, 'Diego','Valdez','diego.valdez@example.com','111111123','Cabildo 4500','ACTIVO',4750,1,9)
 ON CONFLICT (internal_id) DO NOTHING;
 
+-- Asociar zonas adicionales a prestadores
+INSERT INTO prestador_zona (prestador_id, zona_id) VALUES
+  -- Juan (1) también trabaja en Zona 2
+  ((SELECT internal_id FROM prestador WHERE external_id = 1), 2),
+  -- Maria (2) también trabaja en Zona 1
+  ((SELECT internal_id FROM prestador WHERE external_id = 2), 1),
+  -- Sofia (4) también trabaja en Zona 2
+  ((SELECT internal_id FROM prestador WHERE external_id = 4), 2)
+ON CONFLICT DO NOTHING;
+
 -- =========================
 -- Calificaciones (prestador_calificacion) -> usa prestador.internal_id
 -- =========================
