@@ -95,9 +95,9 @@ jobs:
               inst_missed=$2; inst_covered=$3; inst_total=inst_missed+inst_covered; inst_perc=inst_covered/inst_total*100
               bran_missed=$4; bran_covered=$5; bran_total=bran_missed+bran_covered; bran_perc=bran_covered/bran_total*100
               cxty_missed=$8; cxty_covered=$9
-              line_missed=${10}; line_covered=${11}
-              meth_missed=${12}; meth_covered=${13}
-              clas_missed=${14}; clas_covered=${15}
+              line_missed=$10; line_covered=$11
+              meth_missed=$12; meth_covered=$13
+              clas_missed=$14; clas_covered=$15
               printf "| %.2f%% (%d/%d) | %.2f%% (%d/%d) | %d/%d | %d/%d | %d/%d | %d/%d |\n", inst_perc, inst_covered, inst_total, bran_perc, bran_covered, bran_total, cxty_covered, cxty_missed+cxty_covered, line_covered, line_missed+line_covered, meth_covered, meth_missed+meth_covered, clas_covered, clas_missed+clas_covered
             }' >> $GITHUB_STEP_SUMMARY
           else
