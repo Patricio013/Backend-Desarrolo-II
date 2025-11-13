@@ -143,6 +143,16 @@
 					<goals>
 						<goal>report</goal>
 					</goals>
+					<configuration>
+						<excludes>
+							<exclude>com/example/demo/ArreglaYaBackendApplication.class</exclude>
+							<exclude>com/example/demo/config/**/*</exclude>
+							<exclude>com/example/demo/dto/**/*</exclude>
+							<exclude>com/example/demo/entity/**/*</exclude>
+							<exclude>com/example/demo/response/**/*</exclude>
+							<exclude>com/example/demo/websocket/**/*</exclude>
+						</excludes>
+					</configuration>
 					</execution>
 				</executions>
 			</plugin>
