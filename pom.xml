@@ -138,12 +138,9 @@
 						<goal>report</goal>
 					</goals>
 					<configuration>
-						<excludes>
-							<exclude>com/example/demo/ArreglaYaBackendApplication.class</exclude>
-							<exclude>com/example/demo/config/**/*</exclude>
-							<exclude>com/example/demo/websocket/**/*</exclude>
-							<!-- DTOs, Entities, and Responses are now included for a more accurate coverage report -->
-						</excludes>
+						<includes>
+							<include>com/example/demo/service/**/*</include>
+						</includes>
 					</configuration>
 					</execution>
 					<execution>
@@ -155,11 +152,14 @@
 							<rules>
 								<rule>
 									<element>BUNDLE</element>
+									<includes>
+										<include>com/example/demo/service/**/*</include>
+									</includes>
 									<limits>
 										<limit>
 											<counter>INSTRUCTION</counter>
 											<value>COVEREDRATIO</value>
-											<minimum>0.25</minimum>
+											<minimum>0.70</minimum>
 										</limit>
 									</limits>
 								</rule>
