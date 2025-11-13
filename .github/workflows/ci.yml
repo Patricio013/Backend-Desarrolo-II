@@ -41,7 +41,7 @@ jobs:
           cache: maven
 
       - name: Maven test
-        run: mvn -B clean test
+        run: mvn -B clean verify
 
       - name: Resumen JUnit
         if: always()
@@ -80,6 +80,36 @@ jobs:
           path: |
             **/target/surefire-reports/*.xml
             **/target/failsafe-reports/*.xml
+
+      - name: Resumen de Cobertura JaCoCo
+        if: always()
+        run: |
+          echo "## 🔬 Cobertura de Código (JaCoCo)" >> $GITHUB_STEP_SUMMARY
+          JACOCO_CSV="target/site/jacoco/jacoco.csv"
+          if [ -f "$JACOCO_CSV" ]; then
+            echo "| Instructions | Branches | Complexity | Lines | Methods | Classes |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------------:|---------:|-----------:|------:|--------:|--------:|" >> $GITHUB_STEP_SUMMARY
+            # Leer la última línea del CSV (los totales), ignorando la cabecera
+            tail -n 1 "$JACOCO_CSV" | awk -F, '{
+              # MISSED, COVERED
+              inst_missed=$2; inst_covered=$3; inst_total=inst_missed+inst_covered; inst_perc=inst_covered/inst_total*100
+              bran_missed=$4; bran_covered=$5; bran_total=bran_missed+bran_covered; bran_perc=bran_covered/bran_total*100
+              cxty_missed=$8; cxty_covered=$9
+              line_missed=${10}; line_covered=${11}
+              meth_missed=${12}; meth_covered=${13}
+              clas_missed=${14}; clas_covered=${15}
+              printf "| %.2f%% (%d/%d) | %.2f%% (%d/%d) | %d/%d | %d/%d | %d/%d | %d/%d |\n", inst_perc, inst_covered, inst_total, bran_perc, bran_covered, bran_total, cxty_covered, cxty_missed+cxty_covered, line_covered, line_missed+line_covered, meth_covered, meth_missed+meth_covered, clas_covered, clas_missed+clas_covered
+            }' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "_No se encontró el reporte de JaCoCo (jacoco.csv)._" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Subir artefacto de Cobertura JaCoCo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: target/site/jacoco/
  
   k6-load:
     name: k6 (smoke/stress/soak/spike)

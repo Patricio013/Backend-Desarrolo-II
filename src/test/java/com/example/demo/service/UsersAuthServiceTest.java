@@ -1,6 +1,6 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.UserLoginRequest;
+import com.example.demo.dto.LoginRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -33,7 +33,7 @@ class UsersAuthServiceTest {
     @InjectMocks
     private UsersAuthService usersAuthService;
 
-    private UserLoginRequest loginRequest;
+    private LoginRequest loginRequest;
 
     @BeforeEach
     void setUp() {
@@ -49,7 +49,7 @@ class UsersAuthServiceTest {
         ReflectionTestUtils.setField(usersAuthService, "roleClaimNames", "role,roles,authorities");
         ReflectionTestUtils.setField(usersAuthService, "adminRoleValues", "ADMIN,SUPER_ADMIN");
 
-        loginRequest = new UserLoginRequest();
+        loginRequest = new LoginRequest();
         loginRequest.setEmail("admin@test.com");
         loginRequest.setPassword("password");
     }
