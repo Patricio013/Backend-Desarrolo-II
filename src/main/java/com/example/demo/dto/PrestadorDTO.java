@@ -21,8 +21,17 @@ public class PrestadorDTO {
     private Double precioHora;
     private Long zonaId;
     private List<Long> zonaIds;
+    private List<ZonaDetalleDTO> zonasDetalles;
     private List<Habilidad> habilidades;
     private List<Short> calificacion;
     private Integer trabajosFinalizados;
     private List<PrestadorDireccionDTO> direcciones;
+
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ZonaDetalleDTO {
+        private Long id;
+        private String nombre;
+    }
 }

@@ -206,6 +206,17 @@ public class PrestadorSyncService {
     if ((zonaIds == null || zonaIds.isEmpty()) && dto.getZonaId() != null) {
       zonaIds = List.of(dto.getZonaId());
     }
+    Map<Long, String> nombres = new LinkedHashMap<>();
+    var zonasDetalles = dto.getZonasDetalles();
+    if (zonasDetalles != null) {
+      for (var z : zonasDetalles) {
+        if (z == null || z.getId() == null) continue;
+        nombres.putIfAbsent(z.getId(), z.getNombre());
+      }
+    }
+    if ((zonaIds == null || zonaIds.isEmpty()) && !nombres.isEmpty()) {
+      zonaIds = new ArrayList<>(nombres.keySet());
+    }
     if (zonaIds == null || zonaIds.isEmpty()) {
       return List.of();
     }
@@ -214,11 +225,12 @@ public class PrestadorSyncService {
       if (externalId == null) {
         continue;
       }
+      String nombre = nombres.get(externalId);
       Zona zona = zonaRepository.findByExternalId(externalId)
           .orElseGet(() -> zonaRepository.save(
               Zona.builder()
                   .externalId(externalId)
-                  .nombre("Zona " + externalId)
+                  .nombre(nombre != null && !nombre.isBlank() ? nombre : "Zona " + externalId)
                   .build()
           ));
       zonas.add(zona);

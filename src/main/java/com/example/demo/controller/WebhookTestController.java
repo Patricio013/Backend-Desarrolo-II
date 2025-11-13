@@ -882,6 +882,7 @@ public class WebhookTestController {
                 .precioHora(0.0)
                 .zonaId(zonaId)
                 .zonaIds(extractLongListFlexible(root, "zones"))
+                .zonasDetalles(extractZonaDetalles(root, "zones"))
                 .habilidades(habilidades)
                 .direcciones(extractDireccionesDTO(payloadSection))
                 .build();
@@ -914,6 +915,38 @@ public class WebhookTestController {
                         }
                     } catch (NumberFormatException ignore) {
                     }
+                }
+            }
+        }
+        return out;
+    }
+
+    private java.util.List<PrestadorDTO.ZonaDetalleDTO> extractZonaDetalles(Map<String, Object> payload, String key) {
+        if (payload == null) return java.util.List.of();
+        Object raw = payload.get(key);
+        if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+            return java.util.List.of();
+        }
+        java.util.List<PrestadorDTO.ZonaDetalleDTO> out = new java.util.ArrayList<>();
+        for (Object item : list) {
+            if (item instanceof java.util.Map<?, ?> m) {
+                Object idVal = m.get("id");
+                Long id = null;
+                if (idVal instanceof Number n) {
+                    id = n.longValue();
+                } else if (idVal != null) {
+                    try { id = Long.valueOf(idVal.toString().trim()); } catch (Exception ignore) {}
+                }
+                String nombre = null;
+                Object nombreVal = m.get("nombre");
+                if (nombreVal instanceof String s && !s.isBlank()) {
+                    nombre = s.trim();
+                }
+                if (id != null || nombre != null) {
+                    PrestadorDTO.ZonaDetalleDTO dto = new PrestadorDTO.ZonaDetalleDTO();
+                    dto.setId(id);
+                    dto.setNombre(nombre);
+                    out.add(dto);
                 }
             }
         }
