@@ -91,14 +91,35 @@ jobs:
             echo "|-------------:|---------:|-----------:|------:|--------:|--------:|" >> $GITHUB_STEP_SUMMARY
             # Leer la última línea del CSV (los totales), ignorando la cabecera
             tail -n 1 "$JACOCO_CSV" | awk -F, '{
-              # MISSED, COVERED
-              inst_missed=$2; inst_covered=$3; inst_total=inst_missed+inst_covered; inst_perc=inst_covered/inst_total*100
-              bran_missed=$4; bran_covered=$5; bran_total=bran_missed+bran_covered; bran_perc=bran_covered/bran_total*100
-              cxty_missed=$8; cxty_covered=$9
-              line_missed=$10; line_covered=$11
-              meth_missed=$12; meth_covered=$13
-              clas_missed=$14; clas_covered=$15
-              printf "| %.2f%% (%d/%d) | %.2f%% (%d/%d) | %d/%d | %d/%d | %d/%d | %d/%d |\n", inst_perc, inst_covered, inst_total, bran_perc, bran_covered, bran_total, cxty_covered, cxty_missed+cxty_covered, line_covered, line_missed+line_covered, meth_covered, meth_missed+meth_covered, clas_covered, clas_missed+clas_covered
+              # JaCoCo CSV format (total line):
+              # GROUP,PACKAGE,CLASS,INSTRUCTION_MISSED,INSTRUCTION_COVERED,BRANCH_MISSED,BRANCH_COVERED,LINE_MISSED,LINE_COVERED,COMPLEXITY_MISSED,COMPLEXITY_COVERED,METHOD_MISSED,METHOD_COVERED,CLASS_MISSED,CLASS_COVERED
+
+              # Instructions
+              inst_missed = $4; inst_covered = $5;
+              inst_total = inst_missed + inst_covered;
+              inst_perc = (inst_total > 0 ? inst_covered / inst_total * 100 : 0);
+
+              # Branches
+              bran_missed = $6; bran_covered = $7;
+              bran_total = bran_missed + bran_covered;
+              bran_perc = (bran_total > 0 ? bran_covered / bran_total * 100 : 0);
+
+              # Lines
+              line_missed = $8; line_covered = $9; line_total = line_missed + line_covered;
+              # Complexity
+              cxty_missed = $10; cxty_covered = $11; cxty_total = cxty_missed + cxty_covered;
+              # Methods
+              meth_missed = $12; meth_covered = $13; meth_total = meth_missed + meth_covered;
+              # Classes
+              clas_missed = $14; clas_covered = $15; clas_total = clas_missed + clas_covered;
+
+              printf "| %.2f%% (%d/%d) | %.2f%% (%d/%d) | %d/%d | %d/%d | %d/%d | %d/%d |\n",
+                     inst_perc, inst_covered, inst_total,
+                     bran_perc, bran_covered, bran_total,
+                     cxty_covered, cxty_total,
+                     line_covered, line_total,
+                     meth_covered, meth_total,
+                     clas_covered, clas_total
             }' >> $GITHUB_STEP_SUMMARY
           else
             echo "_No se encontró el reporte de JaCoCo (jacoco.csv)._" >> $GITHUB_STEP_SUMMARY
