@@ -116,6 +116,8 @@ public class MatchingPublisherService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("solicitudId", resultado.getSolicitudId());
         out.put("descripcion", resultado.getDescripcion());
+        out.put("usuarioId", resultado.getUsuarioId());
+        out.put("horario", resultado.getHorario());
         out.put("estado", resultado.getEstado());
         out.put("fueCotizada", resultado.getFueCotizada());
         out.put("esCritica", resultado.getEsCritica());

@@ -173,8 +173,19 @@ public class SolicitudService {
         if (resultados == null || resultados.isEmpty()) {
             return;
         }
+
+        List<SolicitudTop3Resultado> publicables = resultados.stream()
+            .filter(Objects::nonNull)
+            .filter(r -> r.getEstado() != null && !EstadoSolicitud.CREADA.name().equalsIgnoreCase(r.getEstado()))
+            .filter(r -> r.getTop3() != null && !r.getTop3().isEmpty())
+            .collect(Collectors.toList());
+
+        if (publicables.isEmpty()) {
+            log.debug("No hay solicitudes con invitaciones para publicar en cotizacion.emitida");
+            return;
+        }
         try {
-            MatchingPublisherService.PublishResult publishResult = matchingPublisherService.publishSolicitudesTop3(resultados);
+            MatchingPublisherService.PublishResult publishResult = matchingPublisherService.publishSolicitudesTop3(publicables);
             if (publishResult.success()) {
                 log.info("Evento top3 publicado messageId={} status={}", publishResult.messageId(), publishResult.status());
             } else if (publishResult.messageId() == null) {
@@ -209,6 +220,8 @@ public class SolicitudService {
                 solicitud.getHabilidadId(), rubroId, solicitud.getId());
             SolicitudTop3Resultado out = new SolicitudTop3Resultado();
             out.setSolicitudId(solicitud.getId());
+            out.setUsuarioId(solicitud.getUsuarioId());
+            out.setHorario(solicitud.getHorario());
             out.setDescripcion(solicitud.getDescripcion());
             out.setEstado(solicitud.getEstado().name());
             out.setFueCotizada(solicitud.isFueCotizada());
@@ -246,6 +259,8 @@ public class SolicitudService {
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
+        out.setUsuarioId(solicitud.getUsuarioId());
+        out.setHorario(solicitud.getHorario());
         out.setDescripcion(solicitud.getDescripcion());
         out.setEstado(solicitud.getEstado().name()); // COTIZANDO
         out.setFueCotizada(solicitud.isFueCotizada());

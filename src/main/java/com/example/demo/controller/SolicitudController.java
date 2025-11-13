@@ -71,6 +71,12 @@ public class SolicitudController {
 
         public Long getSolicitudId() { return solicitudId; }
         public void setSolicitudId(Long solicitudId) { this.solicitudId = solicitudId; }
+        public Long getUsuarioId() { return usuarioId; }
+        public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
+        public java.time.LocalTime getHorario() { return horario; }
+        public void setHorario(java.time.LocalTime horario) { this.horario = horario; }
+        private Long usuarioId;
+        private java.time.LocalTime horario;
         public String getDescripcion() { return descripcion; }
         public void setDescripcion(String descripcion) { this.descripcion = descripcion; }
         public String getEstado() { return estado; }
