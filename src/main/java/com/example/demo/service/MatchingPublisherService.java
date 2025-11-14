@@ -5,9 +5,17 @@ import com.example.demo.controller.SolicitudController;
 import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.entity.Cotizacion;
+import com.example.demo.entity.MatchingPublishMessage;
+import com.example.demo.entity.MatchingPublishMessage.MessageType;
+import com.example.demo.entity.MatchingPublishMessage.PublishStatus;
 import com.example.demo.entity.Solicitud;
+import com.example.demo.repository.MatchingPublishMessageRepository;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -17,6 +25,8 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,39 +38,30 @@ import java.util.UUID;
 @Slf4j
 public class MatchingPublisherService {
 
+    private static final List<PublishStatus> RETRIABLE_STATUSES = List.of(PublishStatus.PENDING, PublishStatus.FAILED);
+    private static final int DEFAULT_RETRY_LIMIT = 50;
+    private static final int MAX_RETRY_LIMIT = 200;
+
     private final RestClient matchingRestClient;
     private final MatchingIntegrationProperties properties;
+    private final MatchingPublishMessageRepository publishMessageRepository;
+    private final ObjectMapper objectMapper;
 
     public PublishResult publishSolicitudesTop3(List<SolicitudTop3Resultado> resultados) {
-        if (!properties.publishEnabled()) {
-            log.info("Matching publish disabled; skipping top3 publication");
-            return PublishResult.skipped("Publishing disabled by configuration");
-        }
         if (resultados == null || resultados.isEmpty()) {
             log.info("No hay solicitudes procesadas para publicar top3");
             return PublishResult.skipped("No solicitudes to publish");
         }
 
         PublishMessage message = buildMessage(resultados);
-        try {
-            ResponseEntity<Void> response = matchingRestClient.post()
-                    .uri(properties.publishPath())
-                    .body(message)
-                    .retrieve()
-                    .toBodilessEntity();
-            HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
-            log.info("Publicado top3 en Matching messageId={} status={} topic={} event={}",
-                    message.messageId(), status, message.destination().topic(), message.destination().eventName());
-            return PublishResult.success(message.messageId(), status);
-        } catch (RestClientResponseException e) {
-            HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
-            log.error("Error publicando top3 messageId={} status={} body={}",
-                    message.messageId(), status, e.getResponseBodyAsString());
-            return PublishResult.failure(message.messageId(), status, e.getResponseBodyAsString());
-        } catch (RestClientException e) {
-            log.error("Error publicando top3 messageId={}", message.messageId(), e);
-            return PublishResult.failure(message.messageId(), HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        MatchingPublishMessage stored = persistMessage(MessageType.TOP3, message);
+
+        if (!properties.publishEnabled()) {
+            log.info("Matching publish disabled; mensaje {} almacenado como pendiente", stored.getId());
+            return PublishResult.skipped("Publishing disabled by configuration");
         }
+
+        return sendAndUpdate(stored, message);
     }
 
     private PublishMessage buildMessage(List<SolicitudTop3Resultado> resultados) {
@@ -82,35 +83,20 @@ public class MatchingPublisherService {
     public PublishResult publishCotizaciones(Solicitud solicitud,
                                              List<Cotizacion> cotizaciones,
                                              int objetivoCotizaciones) {
-        if (!properties.publishEnabled()) {
-            log.debug("Matching publish disabled; skipping cotizaciones publication");
-            return PublishResult.skipped("Publishing disabled by configuration");
-        }
         if (solicitud == null || cotizaciones == null || cotizaciones.isEmpty()) {
             log.debug("Sin cotizaciones para publicar");
             return PublishResult.skipped("No cotizaciones to publish");
         }
 
         PublishMessage message = buildCotizacionesMessage(solicitud, cotizaciones, objetivoCotizaciones);
-        try {
-            ResponseEntity<Void> response = matchingRestClient.post()
-                    .uri(properties.publishPath())
-                    .body(message)
-                    .retrieve()
-                    .toBodilessEntity();
-            HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
-            log.info("Publicado resumen de cotizaciones messageId={} status={} topic={} event={}",
-                    message.messageId(), status, message.destination().topic(), message.destination().eventName());
-            return PublishResult.success(message.messageId(), status);
-        } catch (RestClientResponseException e) {
-            HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
-            log.error("Error publicando cotizaciones messageId={} status={} body={}",
-                    message.messageId(), status, e.getResponseBodyAsString());
-            return PublishResult.failure(message.messageId(), status, e.getResponseBodyAsString());
-        } catch (RestClientException e) {
-            log.error("Error publicando cotizaciones messageId={}", message.messageId(), e);
-            return PublishResult.failure(message.messageId(), HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        MatchingPublishMessage stored = persistMessage(MessageType.COTIZACIONES, message);
+
+        if (!properties.publishEnabled()) {
+            log.debug("Matching publish disabled; mensaje {} almacenado como pendiente", stored.getId());
+            return PublishResult.skipped("Publishing disabled by configuration");
         }
+
+        return sendAndUpdate(stored, message);
     }
 
     private Map<String, Object> mapSolicitud(SolicitudTop3Resultado resultado) {
@@ -239,6 +225,9 @@ public class MatchingPublisherService {
         }
     }
 
+    public record RetryResult(int attempted, int sent, int failed, long remainingPending,
+                              List<Long> processedMessageIds) {}
+
     // ===== Pagos: Solicitud de Pago Emitida =====
     public PublishResult publishSolicitudPagoEmitida(
             String idCorrelacion,
@@ -253,11 +242,6 @@ public class MatchingPublisherService {
             String descripcion,
             String descripcionSolicitud
     ) {
-        if (!properties.publishEnabled()) {
-            log.debug("Matching publish disabled; skipping pago emitida publication");
-            return PublishResult.skipped("Publishing disabled by configuration");
-        }
-
         Map<String, Object> pago = new LinkedHashMap<>();
         pago.put("idCorrelacion", idCorrelacion);
         pago.put("idUsuario", idUsuario);
@@ -285,7 +269,66 @@ public class MatchingPublisherService {
                 new Destination(properties.publishPagoChannel(), properties.publishPagoEventName()),
                 payload
         );
+        MatchingPublishMessage stored = persistMessage(MessageType.SOLICITUD_PAGO, message);
 
+        if (!properties.publishEnabled()) {
+            log.debug("Matching publish disabled; mensaje {} almacenado como pendiente", stored.getId());
+            return PublishResult.skipped("Publishing disabled by configuration");
+        }
+
+        return sendAndUpdate(stored, message);
+    }
+
+    public RetryResult retryPendingMessages(List<Long> messageIds, int max) {
+        List<MatchingPublishMessage> targets = findMessagesForRetry(messageIds, max);
+        if (targets.isEmpty()) {
+            long remaining = publishMessageRepository.countByStatusIn(RETRIABLE_STATUSES);
+            return new RetryResult(0, 0, 0, remaining, List.of());
+        }
+
+        if (!properties.publishEnabled()) {
+            log.warn("Matching publish disabled por configuración, reintentando manualmente {} mensajes", targets.size());
+        }
+
+        List<Long> processed = new ArrayList<>();
+        int sent = 0;
+        int failed = 0;
+        for (MatchingPublishMessage entry : targets) {
+            PublishResult result = sendStoredMessage(entry);
+            processed.add(entry.getId());
+            if (result.success()) {
+                sent++;
+            } else {
+                failed++;
+            }
+        }
+        long remaining = publishMessageRepository.countByStatusIn(RETRIABLE_STATUSES);
+        return new RetryResult(processed.size(), sent, failed, remaining, processed);
+    }
+
+    private List<MatchingPublishMessage> findMessagesForRetry(List<Long> messageIds, int max) {
+        if (messageIds != null && !messageIds.isEmpty()) {
+            return publishMessageRepository.findByIdIn(messageIds).stream()
+                    .filter(msg -> msg.getStatus() != PublishStatus.SENT)
+                    .toList();
+        }
+        int limit = normalizeRetryLimit(max);
+        return publishMessageRepository.findByStatusIn(RETRIABLE_STATUSES, PageRequest.of(0, limit));
+    }
+
+    private int normalizeRetryLimit(int requested) {
+        if (requested <= 0) {
+            return DEFAULT_RETRY_LIMIT;
+        }
+        return Math.min(requested, MAX_RETRY_LIMIT);
+    }
+
+    private PublishResult sendStoredMessage(MatchingPublishMessage stored) {
+        PublishMessage message = rebuildMessage(stored);
+        return sendAndUpdate(stored, message);
+    }
+
+    private PublishResult sendAndUpdate(MatchingPublishMessage stored, PublishMessage message) {
         try {
             ResponseEntity<Void> response = matchingRestClient.post()
                     .uri(properties.publishPath())
@@ -293,16 +336,66 @@ public class MatchingPublisherService {
                     .retrieve()
                     .toBodilessEntity();
             HttpStatus status = HttpStatus.valueOf(response.getStatusCode().value());
-            log.info("Publicado evento Pago Emitida messageId={} status={}", message.messageId(), status);
+            stored.markAttempt(status.value(), null, PublishStatus.SENT);
+            publishMessageRepository.save(stored);
+            log.info("Publicado messageId={} type={} status={} topic={} event={}",
+                    message.messageId(), stored.getType(), status,
+                    message.destination().topic(), message.destination().eventName());
             return PublishResult.success(message.messageId(), status);
         } catch (RestClientResponseException e) {
             HttpStatus status = HttpStatus.valueOf(e.getStatusCode().value());
-            log.error("Error publicando Pago Emitida messageId={} status={} body={}",
-                    message.messageId(), status, e.getResponseBodyAsString());
+            stored.markAttempt(status.value(), e.getResponseBodyAsString(), PublishStatus.FAILED);
+            publishMessageRepository.save(stored);
+            log.error("Error publicando messageId={} type={} status={} body={}",
+                    message.messageId(), stored.getType(), status, e.getResponseBodyAsString());
             return PublishResult.failure(message.messageId(), status, e.getResponseBodyAsString());
         } catch (RestClientException e) {
-            log.error("Error publicando Pago Emitida messageId={}", message.messageId(), e);
+            stored.markAttempt(HttpStatus.INTERNAL_SERVER_ERROR.value(), e.getMessage(), PublishStatus.FAILED);
+            publishMessageRepository.save(stored);
+            log.error("Error publicando messageId={} type={}", message.messageId(), stored.getType(), e);
             return PublishResult.failure(message.messageId(), HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage());
+        }
+    }
+
+    private PublishMessage rebuildMessage(MatchingPublishMessage stored) {
+        Map<String, Object> payload = deserializePayload(stored.getPayloadJson());
+        return new PublishMessage(
+                stored.getMessageId(),
+                stored.getMessageTimestamp(),
+                new Destination(stored.getDestinationTopic(), stored.getDestinationEvent()),
+                payload
+        );
+    }
+
+    private MatchingPublishMessage persistMessage(MessageType type, PublishMessage message) {
+        MatchingPublishMessage entity = MatchingPublishMessage.builder()
+                .messageId(message.messageId())
+                .type(type)
+                .destinationTopic(message.destination().topic())
+                .destinationEvent(message.destination().eventName())
+                .messageTimestamp(message.timestamp())
+                .payloadJson(serializePayload(message.payload()))
+                .status(PublishStatus.PENDING)
+                .build();
+        return publishMessageRepository.save(entity);
+    }
+
+    private String serializePayload(Map<String, Object> payload) {
+        try {
+            return objectMapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("No se pudo serializar el payload para Matching", e);
+        }
+    }
+
+    private Map<String, Object> deserializePayload(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new IllegalStateException("No se pudo deserializar el payload almacenado de Matching", e);
         }
     }
 }

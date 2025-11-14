@@ -46,6 +46,16 @@ public class WebhookEvent {
     @Column(nullable = false)
     private LocalDateTime receivedAt;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean processed = false;
+
+    @Column(name = "processed_at")
+    private LocalDateTime processedAt;
+
+    @Column(name = "processing_action", length = 160)
+    private String processingAction;
+
     @PrePersist
     void prePersist() {
         if (receivedAt == null) {

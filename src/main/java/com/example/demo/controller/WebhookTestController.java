@@ -30,11 +30,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 import java.math.BigDecimal;
 import java.lang.reflect.Array;
@@ -42,6 +48,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Locale;
 
 @Slf4j
 @RestController
@@ -60,12 +67,15 @@ public class WebhookTestController {
     private final HabilidadSyncService habilidadSyncService;
     private final ObjectMapper objectMapper;
     private final PrestadorSyncService prestadorSyncService;
+    private final RestTemplate restTemplate;
 
     @PostMapping(consumes = MediaType.ALL_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ModuleResponse<Map<String, Object>>> receive(
             @RequestBody(required = false) byte[] bodyBytes,
             @RequestHeader Map<String, String> headers,
-            HttpServletRequest request
+            HttpServletRequest request,
+            @RequestParam(name = "skipAck", defaultValue = "false") boolean skipAck,
+            @RequestParam(name = "replayOf", required = false) Long replayOf
     ) {
         String rawBody = (bodyBytes != null && bodyBytes.length > 0)
                 ? new String(bodyBytes, StandardCharsets.UTF_8)
@@ -89,7 +99,9 @@ public class WebhookTestController {
             );
 
             // Intento de ACK si hay datos suficientes
-            AckOutcome ackOutcome = attemptAckIfPossible(safePayload, headers);
+            AckOutcome ackOutcome = skipAck
+                    ? AckOutcome.notPerformed()
+                    : attemptAckIfPossible(safePayload, headers);
 
             String topic = firstNonNull(
                     extractString(safePayload, "topic"),
@@ -596,6 +608,11 @@ public class WebhookTestController {
             storedPayload.put("parsed", safePayload);
             storedPayload.put("rawBody", rawBody);
             storedPayload.put("headers", headers);
+            storedPayload.put("contentType", request.getContentType());
+            storedPayload.put("requestUri", request.getRequestURI());
+            if (replayOf != null) {
+                storedPayload.put("replayOfEventId", replayOf);
+            }
             storedPayload.put("ack", ackMetadata);
             storedPayload.put("solicitudCreada", solicitudCreada);
             if (solicitudIdCreada != null) {
@@ -708,6 +725,9 @@ public class WebhookTestController {
             responsePayload.put("storedEventId", stored.getId());
             responsePayload.put("receivedContentType", request.getContentType());
             responsePayload.put("receivedHeaders", headers);
+            if (replayOf != null) {
+                responsePayload.put("replayOfEventId", replayOf);
+            }
             responsePayload.put("solicitudCreada", solicitudCreada);
             if (solicitudIdCreada != null) {
                 responsePayload.put("solicitudId", solicitudIdCreada);
@@ -843,6 +863,67 @@ public class WebhookTestController {
         }
     }
 
+    @PostMapping("/events/{id}/reprocess")
+    public ResponseEntity<ModuleResponse<Map<String, Object>>> reprocess(@PathVariable Long id) {
+        WebhookEvent event = webhookEventService.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Webhook event not found"));
+
+        Map<String, Object> storedPayload = parseStoredPayload(event);
+        ResponseEntity<ModuleResponse<Map<String, Object>>> response = replayStoredEvent(event, storedPayload);
+        if (response.getStatusCode().is2xxSuccessful()) {
+            webhookEventService.markProcessed(id, "reprocessed");
+        }
+        return ResponseEntity.status(response.getStatusCode()).body(response.getBody());
+    }
+
+    @PostMapping("/events/reprocess")
+    public ResponseEntity<ModuleResponse<Map<String, Object>>> reprocessMultiple(
+            @RequestParam(name = "onlyNotCreated", defaultValue = "false") boolean onlyNotCreated,
+            @RequestParam(name = "limit", defaultValue = "50") int limit
+    ) {
+        int max = Math.min(Math.max(limit, 1), 500);
+        List<WebhookEvent> events = webhookEventService.findUnprocessed(max * (onlyNotCreated ? 2 : 1));
+        int attempted = 0;
+        int success = 0;
+        List<Long> processedIds = new ArrayList<>();
+        List<Long> failedIds = new ArrayList<>();
+        List<String> errors = new ArrayList<>();
+
+        for (WebhookEvent event : events) {
+            if (attempted >= max) break;
+            Map<String, Object> storedPayload = parseStoredPayload(event);
+            boolean alreadyCreated = Boolean.TRUE.equals(storedPayload.get("solicitudCreada"));
+            if (onlyNotCreated && alreadyCreated) {
+                continue;
+            }
+            attempted++;
+            try {
+                ResponseEntity<ModuleResponse<Map<String, Object>>> response = replayStoredEvent(event, storedPayload);
+                if (response.getStatusCode().is2xxSuccessful()) {
+                    success++;
+                    processedIds.add(event.getId());
+                    webhookEventService.markProcessed(event.getId(), "reprocessed-batch");
+                } else {
+                    failedIds.add(event.getId());
+                    errors.add("id=" + event.getId() + ": status=" + response.getStatusCode());
+                }
+            } catch (ResponseStatusException ex) {
+                failedIds.add(event.getId());
+                errors.add("id=" + event.getId() + ": " + ex.getReason());
+            }
+        }
+
+        Map<String, Object> payload = new java.util.HashMap<>();
+        payload.put("attempted", attempted);
+        payload.put("success", success);
+        payload.put("failed", attempted - success);
+        payload.put("processedIds", processedIds);
+        payload.put("failedIds", failedIds);
+        payload.put("errors", errors);
+
+        return ResponseEntity.ok(responseFactory.build("webhooks", "eventsReprocessed", payload));
+    }
+
     @GetMapping
     public ResponseEntity<ModuleResponse<List<WebhookEvent>>> listStoredEvents() {
         List<WebhookEvent> events = webhookEventService.listEvents();
@@ -854,6 +935,68 @@ public class WebhookTestController {
         WebhookEvent event = webhookEventService.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Webhook event not found"));
         return ResponseEntity.ok(responseFactory.build("webhooks", "storedEventDetail", event));
+    }
+
+    private Map<String, Object> parseStoredPayload(WebhookEvent event) {
+        try {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> payload = objectMapper.readValue(event.getRawPayload(), Map.class);
+            return payload;
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Evento " + event.getId() + " tiene payload inválido", e);
+        }
+    }
+
+    private ResponseEntity<ModuleResponse<Map<String, Object>>> replayStoredEvent(
+            WebhookEvent event,
+            Map<String, Object> storedPayload
+    ) {
+        String rawBody = (String) storedPayload.getOrDefault("rawBody", "");
+        if ((rawBody == null || rawBody.isBlank()) && storedPayload.get("parsed") != null) {
+            try {
+                rawBody = objectMapper.writeValueAsString(storedPayload.get("parsed"));
+            } catch (Exception ex) {
+                rawBody = "{}";
+            }
+        }
+
+        @SuppressWarnings("unchecked")
+        Map<String, String> storedHeaders = (Map<String, String>) storedPayload.getOrDefault("headers", Map.of());
+
+        HttpHeaders httpHeaders = new HttpHeaders();
+        String contentType = (String) storedPayload.getOrDefault("contentType", MediaType.APPLICATION_JSON_VALUE);
+        try {
+            httpHeaders.setContentType(MediaType.valueOf(contentType));
+        } catch (Exception ignored) {
+            httpHeaders.setContentType(MediaType.APPLICATION_JSON);
+        }
+        storedHeaders.forEach((key, value) -> {
+            if (key == null || value == null) return;
+            String lower = key.toLowerCase(Locale.ROOT);
+            if ("host".equals(lower) || "content-length".equals(lower)) return;
+            if ("content-type".equals(lower)) return;
+            httpHeaders.add(key, value);
+        });
+
+        String replayUrl = ServletUriComponentsBuilder.fromCurrentContextPath()
+                .path("/api/webhook")
+                .queryParam("skipAck", true)
+                .queryParam("replayOf", event.getId())
+                .build()
+                .toUriString();
+
+        try {
+            return restTemplate.exchange(
+                    replayUrl,
+                    HttpMethod.POST,
+                    new HttpEntity<>(rawBody, httpHeaders),
+                    new ParameterizedTypeReference<>() {}
+            );
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Error reenviando webhook " + event.getId(), e);
+        }
     }
 
     // ===== Helpers =====
