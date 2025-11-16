@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,5 +31,8 @@ public interface SolicitudRepository extends JpaRepository<Solicitud, Long> {
     """)
     List<Solicitud> findAsignadasEnDiaYFranja(Long prestadorId, LocalDate dia,
                                             LocalTime desde, LocalTime hasta);
+
+    @Query("SELECT s FROM Solicitud s WHERE s.autoCompleted = false AND s.prestadorAsignadoId IS NOT NULL AND s.fecha IS NOT NULL AND s.estado IN :estados")
+    List<Solicitud> findAutoCompletionCandidates(@Param("estados") Collection<EstadoSolicitud> estados);
 
 }

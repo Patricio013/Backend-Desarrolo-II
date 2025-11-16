@@ -99,6 +99,13 @@ public class Solicitud {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(name = "auto_completed", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private boolean autoCompleted = false;
+
+    @Column(name = "auto_completed_at")
+    private LocalDateTime autoCompletedAt;
+
     @PrePersist
     public void onCreate() {
         this.createdAt = LocalDateTime.now();
