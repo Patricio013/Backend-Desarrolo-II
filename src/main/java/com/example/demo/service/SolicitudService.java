@@ -8,12 +8,16 @@ import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.SolicitudInvitacion;
+import com.example.demo.entity.SolicitudWsEvent;
 import com.example.demo.entity.enums.EstadoSolicitud;
 import com.example.demo.repository.HabilidadRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudInvitacionRepository;
 import com.example.demo.repository.SolicitudRepository;
+import com.example.demo.repository.SolicitudWsEventRepository;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +35,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -51,6 +56,7 @@ public class SolicitudService {
 
     @Autowired private NotificacionesService notificacionesService;
     @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
+    @Autowired private SolicitudWsEventRepository solicitudWsEventRepository;
     @Autowired private PrestadorRepository prestadorRepository;
     @Autowired private SolicitudRepository solicitudRepository;
     @Autowired private SimulatedCotizacionClient cotizacionClient;
@@ -58,6 +64,7 @@ public class SolicitudService {
     @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
     @Autowired private MatchingPublisherService matchingPublisherService;
     @Autowired private HabilidadRepository habilidadRepository;
+    @Autowired private ObjectMapper objectMapper;
 
     // Ventana por defecto (minutos) para considerar un turno a partir de "horario"
     @org.springframework.beans.factory.annotation.Value("${solicitudes.invite.slot-minutes:60}")
@@ -893,14 +900,18 @@ public class SolicitudService {
 
     // --- Listado en formato WS ---
     public List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> listarTodasComoWs() {
-        List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> stored = solicitudEventsPublisher.listStoredEvents();
-        if (!stored.isEmpty()) {
-            return stored;
+        List<SolicitudWsEvent> storedDb = solicitudWsEventRepository.findTop200ByOrderByCreatedAtDesc();
+        if (!storedDb.isEmpty()) {
+            return storedDb.stream()
+                    .map(this::mapStoredWsEvent)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
         }
         return solicitudRepository.findAll().stream()
             .map(this::buildWsEventSegunEstado)
             .collect(Collectors.toList());
     }
+
 
     private com.example.demo.websocket.SolicitudEventsPublisher.WsEvent buildWsEventSegunEstado(Solicitud s) {
         var estado = s.getEstado();
@@ -990,6 +1001,34 @@ public class SolicitudService {
         ZonedDateTime zoned = dateTime.atZone(ZoneId.systemDefault())
                 .withZoneSameInstant(ARG_ZONE);
         return zoned.toString();
+    }
+
+    private com.example.demo.websocket.SolicitudEventsPublisher.WsEvent mapStoredWsEvent(SolicitudWsEvent event) {
+        if (event == null) {
+            return null;
+        }
+        Map<String, Object> details = parsePayloadDetails(event.getPayloadJson());
+        Map<String, Object> hydrated = new LinkedHashMap<>(details);
+        hydrated.putIfAbsent("storedAt", toArgentinaTime(event.getCreatedAt()));
+        return new com.example.demo.websocket.SolicitudEventsPublisher.WsEvent(
+                event.getType(),
+                event.getStatus(),
+                event.getTitle(),
+                event.getDescription(),
+                hydrated
+        );
+    }
+
+    private Map<String, Object> parsePayloadDetails(String json) {
+        if (json == null || json.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("No se pudo parsear payload_json de SolicitudWsEvent: {}", e.getMessage());
+            return new LinkedHashMap<>();
+        }
     }
 
     public Solicitud obtenerDetalle(Long id) {

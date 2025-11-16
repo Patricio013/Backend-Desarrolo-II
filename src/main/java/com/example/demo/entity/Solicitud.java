@@ -99,7 +99,7 @@ public class Solicitud {
     @Column(nullable = false)
     private LocalDateTime updatedAt;
 
-    @Column(name = "auto_completed", nullable = false, columnDefinition = "boolean default false")
+    @Column(name = "auto_completed", nullable = false)
     @Builder.Default
     private boolean autoCompleted = false;
 

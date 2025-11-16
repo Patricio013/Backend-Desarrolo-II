@@ -1,6 +1,8 @@
 package com.example.demo.websocket;
 
 import com.example.demo.entity.Solicitud;
+import com.example.demo.entity.SolicitudWsEvent;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
@@ -8,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -20,7 +23,8 @@ public class SolicitudEventsPublisher {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitudEventsPublisher.class);
     private final SimpMessagingTemplate messagingTemplate;
-    private final SolicitudEventsStore eventsStore;
+    private final com.example.demo.repository.SolicitudWsEventRepository eventsRepository;
+    private final ObjectMapper objectMapper;
 
     // Enviar evento completo con el formato solicitado
     public void notifySolicitudEvent(
@@ -53,7 +57,7 @@ public class SolicitudEventsPublisher {
             messagingTemplate.convertAndSend("/topic/solicitudes", payload);
             // Notificación específica por ID (para detalle)
             messagingTemplate.convertAndSend("/topic/solicitudes/" + solicitud.getId(), payload);
-            eventsStore.append(payload);
+            persistEvent(payload);
         } catch (Exception e) {
             log.warn("No se pudo enviar evento WS para solicitud {}: {}", solicitud.getId(), e.getMessage());
         }
@@ -76,7 +80,23 @@ public class SolicitudEventsPublisher {
             Map<String, Object> details
     ) {}
 
-    public List<WsEvent> listStoredEvents() {
-        return eventsStore.listAll();
+    public List<SolicitudWsEvent> listStoredEvents(int limit) {
+        return eventsRepository.findTop200ByOrderByCreatedAtDesc();
+    }
+
+    private void persistEvent(WsEvent event) {
+        try {
+            SolicitudWsEvent entity = SolicitudWsEvent.builder()
+                    .type(event.type())
+                    .status(event.status())
+                    .title(event.title())
+                    .description(event.description())
+                    .payloadJson(objectMapper.writeValueAsString(event.details()))
+                    .createdAt(LocalDateTime.now())
+                    .build();
+            eventsRepository.save(entity);
+        } catch (Exception e) {
+            log.warn("No se pudo persistir WS event {}: {}", event.type(), e.getMessage());
+        }
     }
 }
