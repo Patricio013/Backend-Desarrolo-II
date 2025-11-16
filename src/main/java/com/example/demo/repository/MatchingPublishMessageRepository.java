@@ -2,6 +2,7 @@ package com.example.demo.repository;
 
 import com.example.demo.entity.MatchingPublishMessage;
 import com.example.demo.entity.MatchingPublishMessage.PublishStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,4 +19,8 @@ public interface MatchingPublishMessageRepository extends JpaRepository<Matching
     long countByStatusIn(Collection<PublishStatus> statuses);
 
     List<MatchingPublishMessage> findByIdIn(Collection<Long> ids);
+
+    Page<MatchingPublishMessage> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    Page<MatchingPublishMessage> findByStatusOrderByCreatedAtDesc(PublishStatus status, Pageable pageable);
 }

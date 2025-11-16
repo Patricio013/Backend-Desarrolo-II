@@ -507,6 +507,9 @@ public class SolicitudService {
             new IllegalStateException("No se encontró invitación para la solicitud "
                 + solicitudId + " y prestador " + prestadorId));
 
+        boolean eraAsignado = solicitud.getPrestadorAsignadoId() != null
+            && solicitud.getPrestadorAsignadoId().equals(prestadorId);
+
         if (invitacion.isRechazada()) {
             log.debug("Evento cotizacion.rechazada repetido. solicitud={} prestador={} round={}",
                 solicitudId, prestadorId, invitacion.getRound());
@@ -549,6 +552,11 @@ public class SolicitudService {
             "Prestador " + prestadorId + " rechazó la cotización en round " + round,
             details
         );
+
+        if (eraAsignado) {
+            solicitud.setPrestadorAsignadoId(null);
+            solicitudRepository.save(solicitud);
+        }
 
         if (!quedanPendientes && totalInvitaciones > 0 && totalInvitaciones == rechazos) {
             manejarRoundSinCotizaciones(solicitud, round);

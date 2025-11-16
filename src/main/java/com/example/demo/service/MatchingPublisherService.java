@@ -323,6 +323,16 @@ public class MatchingPublisherService {
         return Math.min(requested, MAX_RETRY_LIMIT);
     }
 
+    public List<MatchingPublishMessage> listMessages(MatchingPublishMessage.PublishStatus status, int limit) {
+        int pageSize = Math.max(1, Math.min(limit, 200));
+        if (status == null) {
+            return publishMessageRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, pageSize))
+                    .getContent();
+        }
+        return publishMessageRepository.findByStatusOrderByCreatedAtDesc(status, PageRequest.of(0, pageSize))
+                .getContent();
+    }
+
     private PublishResult sendStoredMessage(MatchingPublishMessage stored) {
         PublishMessage message = rebuildMessage(stored);
         return sendAndUpdate(stored, message);

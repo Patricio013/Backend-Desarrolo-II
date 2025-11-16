@@ -140,6 +140,8 @@ public class WebhookTestController {
             boolean solicitudCancelada = false;
             Long solicitudIdCancelada = null;
             List<String> solicitudCancelWarnings = new ArrayList<>();
+            boolean pedidoCancelado = false;
+            List<String> pedidoCancelWarnings = new ArrayList<>();
             boolean habilidadProcesada = false;
             Long habilidadIdProcesada = null;
             List<String> habilidadWarnings = new ArrayList<>();
@@ -295,6 +297,33 @@ public class WebhookTestController {
                     } catch (Exception e) {
                         cotizacionRechazadaWarnings.add("Error inesperado al procesar rechazo de cotización: " + e.getMessage());
                         log.error("Error procesando cotizacion.rechazada solicitud={} prestador={}", solicitudId, prestadorId, e);
+                    }
+                }
+            }
+
+            if (payloadSection != null
+                    && topicMatches(topic, "pedido")
+                    && eventMatches(eventName, "pedido", "cancelado", "pedido_cancelado")) {
+                Long pedidoId = extractLong(payloadSection, "id_pedido");
+                Long prestadorId = extractLong(payloadSection, "id_prestador");
+                String motivo = firstNonNull(
+                        extractString(payloadSection, "descripcion"),
+                        "Prestador canceló el pedido"
+                );
+                if (pedidoId == null || prestadorId == null) {
+                    pedidoCancelWarnings.add("id_pedido o id_prestador ausentes en pedido_cancelado");
+                    log.warn("Evento pedido_cancelado incompleto: {}", payloadSection);
+                } else {
+                    try {
+                        solicitudService.registrarRechazoCotizacion(pedidoId, prestadorId, null, motivo);
+                        pedidoCancelado = true;
+                    } catch (IllegalArgumentException | IllegalStateException e) {
+                        pedidoCancelWarnings.add(e.getMessage());
+                        log.warn("Error procesando pedido_cancelado pedido={} prestador={}: {}",
+                                pedidoId, prestadorId, e.getMessage());
+                    } catch (Exception e) {
+                        pedidoCancelWarnings.add("Error inesperado al cancelar pedido: " + e.getMessage());
+                        log.error("Error procesando pedido_cancelado pedido={} prestador={}", pedidoId, prestadorId, e);
                     }
                 }
             }
@@ -651,6 +680,10 @@ public class WebhookTestController {
             if (!cotizacionRechazadaWarnings.isEmpty()) {
                 storedPayload.put("cotizacionRechazadaWarnings", cotizacionRechazadaWarnings);
             }
+            storedPayload.put("pedidoCancelado", pedidoCancelado);
+            if (!pedidoCancelWarnings.isEmpty()) {
+                storedPayload.put("pedidoCancelWarnings", pedidoCancelWarnings);
+            }
             storedPayload.put("calificacionProcesada", calificacionProcesada);
             if (calificacionPrestadorId != null) {
                 storedPayload.put("calificacionPrestadorId", calificacionPrestadorId);
@@ -764,6 +797,10 @@ public class WebhookTestController {
             }
             if (!cotizacionRechazadaWarnings.isEmpty()) {
                 responsePayload.put("cotizacionRechazadaWarnings", cotizacionRechazadaWarnings);
+            }
+            responsePayload.put("pedidoCancelado", pedidoCancelado);
+            if (!pedidoCancelWarnings.isEmpty()) {
+                responsePayload.put("pedidoCancelWarnings", pedidoCancelWarnings);
             }
             responsePayload.put("calificacionProcesada", calificacionProcesada);
             if (calificacionPrestadorId != null) {
