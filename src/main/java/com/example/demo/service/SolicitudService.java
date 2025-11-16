@@ -24,6 +24,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,6 +47,7 @@ public class SolicitudService {
     private static final int MAX_INVITES_CRITICA = 12;
     private static final int CANDIDATE_BATCH_SIZE = 20;
     private static final int MAX_COTIZACION_ROUNDS = 2;
+    private static final ZoneId ARG_ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
 
     @Autowired private NotificacionesService notificacionesService;
     @Autowired private com.example.demo.websocket.SolicitudEventsPublisher solicitudEventsPublisher;
@@ -923,7 +926,7 @@ public class SolicitudService {
                 putIfNotNull(details, "rubroId", s.getRubroId());
                 putIfNotNull(details, "descripcion", s.getDescripcion());
                 putIfNotNull(details, "fecha", s.getFecha());
-                putIfNotNull(details, "horario", s.getUpdatedAt());
+                putIfNotNull(details, "horario", formatTurnoArgentina(s));
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case COTIZANDO -> {
@@ -932,7 +935,7 @@ public class SolicitudService {
                 description = "La solicitud está COTIZANDO";
                 putIfNotNull(details, "rubroId", s.getRubroId());
                 putIfNotNull(details, "fecha", s.getFecha());
-                putIfNotNull(details, "horario", s.getUpdatedAt());
+                putIfNotNull(details, "horario", formatTurnoArgentina(s));
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case ASIGNADA -> {
@@ -962,12 +965,31 @@ public class SolicitudService {
             }
         }
 
+        putIfNotNull(details, "ultimaActualizacion", toArgentinaTime(s.getUpdatedAt()));
+
         return new com.example.demo.websocket.SolicitudEventsPublisher.WsEvent(
                 type, status, title, description, details);
     }
 
     private static void putIfNotNull(Map<String, Object> map, String key, Object value) {
         if (value != null) map.put(key, value);
+    }
+
+    private String formatTurnoArgentina(Solicitud solicitud) {
+        if (solicitud.getFecha() == null || solicitud.getHorario() == null) {
+            return null;
+        }
+        LocalDateTime turno = LocalDateTime.of(solicitud.getFecha(), solicitud.getHorario());
+        return toArgentinaTime(turno);
+    }
+
+    private String toArgentinaTime(LocalDateTime dateTime) {
+        if (dateTime == null) {
+            return null;
+        }
+        ZonedDateTime zoned = dateTime.atZone(ZoneId.systemDefault())
+                .withZoneSameInstant(ARG_ZONE);
+        return zoned.toString();
     }
 
     public Solicitud obtenerDetalle(Long id) {

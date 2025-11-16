@@ -1,9 +1,13 @@
 package com.example.demo.entity;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
 @Entity
 @Table(name = "matching_publish_message", indexes = {
@@ -16,6 +20,8 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class MatchingPublishMessage {
+
+    private static final ZoneId ARG_ZONE = ZoneId.of("America/Argentina/Buenos_Aires");
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -97,5 +103,19 @@ public class MatchingPublishMessage {
         lastStatusCode = statusCode;
         lastError = error;
         status = newStatus;
+    }
+
+    @Transient
+    @JsonProperty("messageTimestampArgentina")
+    public String getMessageTimestampArgentina() {
+        if (messageTimestamp == null) {
+            return null;
+        }
+        try {
+            Instant instant = Instant.parse(messageTimestamp);
+            return instant.atZone(ARG_ZONE).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+        } catch (Exception e) {
+            return messageTimestamp;
+        }
     }
 }
