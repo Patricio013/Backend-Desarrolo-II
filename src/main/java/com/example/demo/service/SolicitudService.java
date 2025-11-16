@@ -882,6 +882,10 @@ public class SolicitudService {
 
     // --- Listado en formato WS ---
     public List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> listarTodasComoWs() {
+        List<com.example.demo.websocket.SolicitudEventsPublisher.WsEvent> stored = solicitudEventsPublisher.listStoredEvents();
+        if (!stored.isEmpty()) {
+            return stored;
+        }
         return solicitudRepository.findAll().stream()
             .map(this::buildWsEventSegunEstado)
             .collect(Collectors.toList());
@@ -911,7 +915,7 @@ public class SolicitudService {
                 putIfNotNull(details, "rubroId", s.getRubroId());
                 putIfNotNull(details, "descripcion", s.getDescripcion());
                 putIfNotNull(details, "fecha", s.getFecha());
-                putIfNotNull(details, "horario", s.getHorario());
+                putIfNotNull(details, "horario", s.getUpdatedAt());
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case COTIZANDO -> {
@@ -920,7 +924,7 @@ public class SolicitudService {
                 description = "La solicitud está COTIZANDO";
                 putIfNotNull(details, "rubroId", s.getRubroId());
                 putIfNotNull(details, "fecha", s.getFecha());
-                putIfNotNull(details, "horario", s.getHorario());
+                putIfNotNull(details, "horario", s.getUpdatedAt());
                 putIfNotNull(details, "preferenciaVentana", s.getPreferenciaVentanaStr());
             }
             case ASIGNADA -> {
