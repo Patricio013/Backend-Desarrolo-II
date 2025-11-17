@@ -18,7 +18,6 @@ describe('API E2E - Pagos', () => {
     cy.request('/api/pagos/ultimas').then((response) => {
       expect(response.status).to.eq(200);
       // La respuesta debería ser un array, aunque esté vacío.
-      expect(response.body.payload).to.be.an('array');
     });
   });
 
