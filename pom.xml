@@ -140,6 +140,7 @@
 					<configuration>
 						<includes>
 							<include>com/example/demo/service/**/*</include>
+							<include>com/example/demo/controller/**/*</include>
 						</includes>
 					</configuration>
 					</execution>
@@ -154,6 +155,7 @@
 									<element>BUNDLE</element>
 									<includes>
 										<include>com/example/demo/service/**/*</include>
+										<include>com/example/demo/controller/**/*</include>
 									</includes>
 									<limits>
 										<limit>
