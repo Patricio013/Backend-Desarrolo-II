@@ -141,6 +141,13 @@
 						<includes>
 							<include>com/example/demo/**/*</include>
 						</includes>
+						<excludes>
+							<exclude>com/example/demo/entity/**/*</exclude>
+							<exclude>com/example/demo/response/**/*</exclude>
+							<exclude>com/example/demo/config/**/*</exclude>
+							<exclude>com/example/demo/websocket/**/*</exclude>
+							<exclude>**/ArreglaYaBackendApplication.class</exclude>
+						</excludes>
 					</configuration>
 					</execution>
 					<execution>
@@ -154,6 +161,13 @@
 									<element>BUNDLE</element>
 									<includes>
 										<include>com/example/demo/**/*</include>
+									</includes>
+									<excludes>
+										<exclude>com/example/demo/entity/**/*</exclude>
+										<exclude>com/example/demo/response/**/*</exclude>
+										<exclude>com/example/demo/config/**/*</exclude>
+										<exclude>com/example/demo/websocket/**/*</exclude>
+										<exclude>**/ArreglaYaBackendApplication.class</exclude>
 									</includes>
 									<limits>
 										<limit>
