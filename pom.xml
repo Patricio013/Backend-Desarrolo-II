@@ -168,7 +168,7 @@
 										<exclude>com/example/demo/config/**/*</exclude>
 										<exclude>com/example/demo/websocket/**/*</exclude>
 										<exclude>**/ArreglaYaBackendApplication.class</exclude>
-									</includes>
+									</excludes>
 									<limits>
 										<limit>
 											<counter>INSTRUCTION</counter>
