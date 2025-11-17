@@ -25,6 +25,11 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
     env:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
@@ -149,6 +154,11 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports: ["5672:5672", "15672:15672"]
+        options: >-
+          --health-cmd="rabbitmq-diagnostics -q ping"
     env:
       SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/ArreglaYaBackend
       SPRING_DATASOURCE_USERNAME: postgres
