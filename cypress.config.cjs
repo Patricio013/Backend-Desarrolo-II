@@ -18,6 +18,7 @@ module.exports = {
       })
       return config
     },
+    baseUrl: 'http://localhost:8080',
     env: {
       API_BASE: 'http://localhost:8080'
     },
