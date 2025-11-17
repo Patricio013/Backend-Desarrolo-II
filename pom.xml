@@ -139,15 +139,8 @@
 					</goals>
 					<configuration>
 						<includes>
-							<include>com/example/demo/**/*</include>
+							<include>com/example/demo/service/**/*</include>
 						</includes>
-						<excludes>
-							<exclude>com/example/demo/entity/**/*</exclude>
-							<exclude>com/example/demo/response/**/*</exclude>
-							<exclude>com/example/demo/config/**/*</exclude>
-							<exclude>com/example/demo/websocket/**/*</exclude>
-							<exclude>**/ArreglaYaBackendApplication.class</exclude>
-						</excludes>
 					</configuration>
 					</execution>
 					<execution>
@@ -160,15 +153,8 @@
 								<rule>
 									<element>BUNDLE</element>
 									<includes>
-										<include>com/example/demo/**/*</include>
+										<include>com/example/demo/service/**/*</include>
 									</includes>
-									<excludes>
-										<exclude>com/example/demo/entity/**/*</exclude>
-										<exclude>com/example/demo/response/**/*</exclude>
-										<exclude>com/example/demo/config/**/*</exclude>
-										<exclude>com/example/demo/websocket/**/*</exclude>
-										<exclude>**/ArreglaYaBackendApplication.class</exclude>
-									</excludes>
 									<limits>
 										<limit>
 											<counter>INSTRUCTION</counter>
