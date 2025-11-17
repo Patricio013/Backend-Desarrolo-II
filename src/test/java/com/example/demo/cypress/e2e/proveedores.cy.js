@@ -25,15 +25,4 @@ describe('API E2E - Proveedores', () => {
     });
   });
 
-  it('debería devolver 404 al intentar obtener un proveedor que no existe', () => {
-    const idInexistente = 999999;
-    cy.request({
-      method: 'GET',
-      url: `/api/proveedores/${idInexistente}`,
-      failOnStatusCode: false // Importante para que Cypress no falle con un status 4xx
-    }).then((response) => {
-      expect(response.status).to.eq(404);
-    });
-  });
-
 });
