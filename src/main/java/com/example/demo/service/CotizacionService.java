@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,13 +36,12 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
 public class CotizacionService {
 
-    private static final int MIN_COTIZACIONES_BATCH = 3;
+    public static final int MIN_COTIZACIONES_BATCH = 3;
 
     private static final Logger log = LoggerFactory.getLogger(CotizacionService.class);
 
@@ -74,6 +74,7 @@ public class CotizacionService {
     private SolicitudPagoService solicitudPagoService;
 
     @Autowired
+    @Lazy
     private SolicitudService solicitudService;
 
     @Autowired
@@ -131,74 +132,16 @@ public class CotizacionService {
         List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
                 .findBySolicitud_InternalIdAndRound(solicitud.getInternalId(), currentRound);
         final int totalCotizaciones = cotizacionesSolicitud.size();
-        final int objetivoCotizaciones = calcularObjetivoCotizaciones(solicitud);
+        final int objetivoCotizaciones = solicitudService.calcularObjetivoCotizaciones(solicitud);
         final boolean listoParaDespacho = totalCotizaciones >= objetivoCotizaciones;
 
         if (listoParaDespacho) {
-            // (1) Enviar al Core con las cotizaciones disponibles en un solo batch lógico
-            cotizacionesSolicitud.forEach(c -> coreClient.enviarCotizacion(
-                    CotizacionesSubmit.builder()
-                            .solicitudId(solicitud.getId())
-                            .prestadorId(c.getPrestador().getId())
-                            .monto(BigDecimal.valueOf(c.getValor()))
-                            .build()
-            ));
-
-            // (2) Armar payload con TODAS las cotizaciones de la solicitud
-            List<SolicitudCotizacionesPut.Item> items = cotizacionesSolicitud.stream()
-                    .map(c -> SolicitudCotizacionesPut.Item.builder()
-                            .idprestador(c.getPrestador().getId())
-                            .monto(BigDecimal.valueOf(c.getValor()))
-                            .build())
-                    .collect(Collectors.toList());
-
-            SolicitudCotizacionesPut payload = SolicitudCotizacionesPut.builder()
-                    .idsolicitud(solicitud.getId())
-                    .cotizaciones(items)
-                    .build();
-
-            // (3) PUT a Solicitudes
-            solicitudesClient.putCotizaciones(payload);
-            // (4) Enviar a modulo de Busquedas (criticas recien con 3)
-            if (!solicitud.isEsCritica() || totalCotizaciones == MIN_COTIZACIONES_BATCH) {
-                busquedasClient.indexarSolicitudCotizaciones(payload);
-            }
-
-            if (created && totalCotizaciones == objetivoCotizaciones) {
-                MatchingPublisherService.PublishResult publishResult =
-                        matchingPublisherService.publishCotizaciones(solicitud, cotizacionesSolicitud, objetivoCotizaciones);
-                if (publishResult.success()) {
-                    log.info("Cotizaciones publicadas al hub messageId={} status={}",
-                            publishResult.messageId(), publishResult.status());
-                } else if (publishResult.messageId() == null) {
-                    log.debug("Publicación de cotizaciones omitida: {}", publishResult.errorMessage());
-                } else {
-                    log.warn("Publicación de cotizaciones fallida status={} error={}",
-                            publishResult.status(), publishResult.errorMessage());
-                }
-
-                Map<String, Object> details = new HashMap<>();
-                details.put("solicitudId", solicitud.getId());
-                details.put("objetivoCotizaciones", objetivoCotizaciones);
-                details.put("totalCotizaciones", totalCotizaciones);
-                details.put("cotizaciones", cotizacionesSolicitud.stream()
-                        .map(c -> Map.of(
-                                "cotizacionId", c.getId(),
-                                "prestadorId", c.getPrestador().getId(),
-                                "monto", BigDecimal.valueOf(c.getValor()),
-                                "round", c.getRound()
-                        ))
-                        .toList());
-                details.put("enviadoABusquedas", true);
-
-                solicitudEventsPublisher.notifySolicitudEvent(
-                        solicitud,
-                        "SOLICITUD_COTIZACIONES_COMPLETAS",
-                        "Cotizaciones completas",
-                        "Se alcanzó el objetivo de cotizaciones y se envió a búsquedas",
-                        details
-                );
-            }
+            despacharCotizaciones(
+                    solicitud,
+                    cotizacionesSolicitud,
+                    objetivoCotizaciones,
+                    created && totalCotizaciones == objetivoCotizaciones
+            );
         } else {
             if (debeInvitarPrestadorExtra(solicitud, totalCotizaciones, objetivoCotizaciones)) {
                 boolean invited = solicitudService.invitarPrestadorAdicional(solicitud);
@@ -265,6 +208,28 @@ public class CotizacionService {
         // =================================================================
     }
 
+    @Transactional
+    public void publicarCotizacionesSiObjetivoReducido(Solicitud solicitud) {
+        if (solicitud == null) {
+            return;
+        }
+        if (solicitud.isEsCritica()) {
+            return; // críticas requieren siempre el objetivo completo original
+        }
+        List<Cotizacion> cotizacionesSolicitud = cotizacionRepository
+                .findBySolicitud_InternalIdAndRound(solicitud.getInternalId(), solicitud.getCotizacionRound());
+        if (cotizacionesSolicitud.isEmpty()) {
+            return;
+        }
+        final int objetivoCotizaciones = solicitudService.calcularObjetivoCotizaciones(solicitud);
+        if (objetivoCotizaciones <= 0) {
+            return;
+        }
+        if (cotizacionesSolicitud.size() >= objetivoCotizaciones) {
+            despacharCotizaciones(solicitud, cotizacionesSolicitud, objetivoCotizaciones, true);
+        }
+    }
+
     private boolean debeInvitarPrestadorExtra(Solicitud solicitud, int totalCotizaciones, int objetivoCotizaciones) {
         if (totalCotizaciones >= objetivoCotizaciones) {
             return false;
@@ -278,26 +243,76 @@ public class CotizacionService {
         return transcurrido.compareTo(maxWaitBeforeExtraInvite) >= 0;
     }
 
-    private int calcularObjetivoCotizaciones(Solicitud solicitud) {
-        if (solicitud.getPrestadorAsignadoId() != null) {
-            return 1;
+    private void despacharCotizaciones(Solicitud solicitud,
+                                       List<Cotizacion> cotizacionesSolicitud,
+                                       int objetivoCotizaciones,
+                                       boolean publicarEnMatching) {
+        final int totalCotizaciones = cotizacionesSolicitud.size();
+
+        // (1) Enviar al Core cada cotización disponible
+        cotizacionesSolicitud.forEach(c -> coreClient.enviarCotizacion(
+                CotizacionesSubmit.builder()
+                        .solicitudId(solicitud.getId())
+                        .prestadorId(c.getPrestador().getId())
+                        .monto(BigDecimal.valueOf(c.getValor()))
+                        .build()
+        ));
+
+        // (2) Armar y enviar payload agregado a Solicitudes / Busquedas
+        List<SolicitudCotizacionesPut.Item> items = cotizacionesSolicitud.stream()
+                .map(c -> SolicitudCotizacionesPut.Item.builder()
+                        .idprestador(c.getPrestador().getId())
+                        .monto(BigDecimal.valueOf(c.getValor()))
+                        .build())
+                .collect(Collectors.toList());
+
+        SolicitudCotizacionesPut payload = SolicitudCotizacionesPut.builder()
+                .idsolicitud(solicitud.getId())
+                .cotizaciones(items)
+                .build();
+
+        solicitudesClient.putCotizaciones(payload);
+        if (!solicitud.isEsCritica() || totalCotizaciones == MIN_COTIZACIONES_BATCH) {
+            busquedasClient.indexarSolicitudCotizaciones(payload);
         }
 
-        int objetivoBase = MIN_COTIZACIONES_BATCH;
-        int round = solicitud.getCotizacionRound();
-        List<Long> invitadosRound = solicitudInvitacionRepository
-            .findPrestadorIdsBySolicitudAndRound(solicitud.getId(), round);
-        if (invitadosRound == null || invitadosRound.isEmpty()) {
-            return objetivoBase;
+        if (!publicarEnMatching) {
+            return;
         }
-        long disponibles = invitadosRound.stream()
-            .filter(Objects::nonNull)
-            .distinct()
-            .count();
-        if (disponibles <= 0) {
-            return objetivoBase;
+
+        MatchingPublisherService.PublishResult publishResult =
+                matchingPublisherService.publishCotizaciones(solicitud, cotizacionesSolicitud, objetivoCotizaciones);
+        if (publishResult.success()) {
+            log.info("Cotizaciones publicadas al hub messageId={} status={}",
+                    publishResult.messageId(), publishResult.status());
+        } else if (publishResult.messageId() == null) {
+            log.debug("Publicación de cotizaciones omitida: {}", publishResult.errorMessage());
+        } else {
+            log.warn("Publicación de cotizaciones fallida status={} error={}",
+                    publishResult.status(), publishResult.errorMessage());
         }
-        return (int) Math.min(objetivoBase, disponibles);
+
+        Map<String, Object> details = new HashMap<>();
+        details.put("solicitudId", solicitud.getId());
+        details.put("objetivoCotizaciones", objetivoCotizaciones);
+        details.put("totalCotizaciones", totalCotizaciones);
+        details.put("cotizaciones", cotizacionesSolicitud.stream()
+                .map(c -> Map.of(
+                        "cotizacionId", c.getId(),
+                        "prestadorId", c.getPrestador().getId(),
+                        "monto", BigDecimal.valueOf(c.getValor()),
+                        "round", c.getRound()
+                ))
+                .toList());
+        details.put("enviadoABusquedas", true);
+
+        solicitudEventsPublisher.notifySolicitudEvent(
+                solicitud,
+                "SOLICITUD_COTIZACIONES_COMPLETAS",
+                "Cotizaciones completas",
+                "Se alcanzó el objetivo de cotizaciones y se envió a búsquedas",
+                details
+        );
     }
 
     /**

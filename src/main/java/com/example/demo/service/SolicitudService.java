@@ -5,11 +5,13 @@ import com.example.demo.client.SimulatedSolicitudesClient;
 import com.example.demo.controller.SolicitudController.SolicitudTop3Resultado;
 import com.example.demo.dto.InvitacionCotizacionDTO;
 import com.example.demo.dto.SolicitudesCreadasDTO;
+import com.example.demo.entity.Cotizacion;
 import com.example.demo.entity.Prestador;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.entity.SolicitudInvitacion;
 import com.example.demo.entity.SolicitudWsEvent;
 import com.example.demo.entity.enums.EstadoSolicitud;
+import com.example.demo.repository.CotizacionRepository;
 import com.example.demo.repository.HabilidadRepository;
 import com.example.demo.repository.PrestadorRepository;
 import com.example.demo.repository.SolicitudInvitacionRepository;
@@ -21,6 +23,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,6 +65,8 @@ public class SolicitudService {
     @Autowired private SimulatedCotizacionClient cotizacionClient;
     @Autowired private SimulatedSolicitudesClient solicitudesClient;
     @Autowired private SolicitudInvitacionRepository solicitudInvitacionRepository;
+    @Autowired private CotizacionRepository cotizacionRepository;
+    @Autowired @Lazy private CotizacionService cotizacionService;
     @Autowired private MatchingPublisherService matchingPublisherService;
     @Autowired private HabilidadRepository habilidadRepository;
     @Autowired private ObjectMapper objectMapper;
@@ -563,6 +568,8 @@ public class SolicitudService {
             details
         );
 
+        ajustarObjetivoTrasRechazo(solicitud);
+
         if (eraAsignado) {
             solicitud.setPrestadorAsignadoId(null);
             solicitudRepository.save(solicitud);
@@ -601,6 +608,58 @@ public class SolicitudService {
             throw new IllegalStateException("No se pudo iniciar la recotización automática para la solicitud "
                 + solicitud.getId(), e);
         }
+    }
+
+    private void ajustarObjetivoTrasRechazo(Solicitud solicitud) {
+        if (solicitud == null || solicitud.isEsCritica()) {
+            return;
+        }
+        List<Cotizacion> cotizaciones = cotizacionRepository
+            .findBySolicitud_InternalIdAndRound(solicitud.getInternalId(), solicitud.getCotizacionRound());
+        if (cotizaciones.isEmpty()) {
+            return;
+        }
+        int objetivoActual = calcularObjetivoCotizaciones(solicitud);
+        if (objetivoActual <= 0) {
+            return;
+        }
+        if (cotizaciones.size() >= objetivoActual) {
+            try {
+                cotizacionService.publicarCotizacionesSiObjetivoReducido(solicitud);
+            } catch (Exception e) {
+                log.warn("No se pudo publicar cotizaciones tras rechazo (solicitud {}): {}", solicitud.getId(), e.getMessage());
+            }
+        }
+    }
+
+    public int calcularObjetivoCotizaciones(Solicitud solicitud) {
+        if (solicitud == null) {
+            return CotizacionService.MIN_COTIZACIONES_BATCH;
+        }
+        if (solicitud.getPrestadorAsignadoId() != null) {
+            return 1;
+        }
+        int objetivoBase = CotizacionService.MIN_COTIZACIONES_BATCH;
+        if (solicitud.isEsCritica()) {
+            return objetivoBase;
+        }
+        int round = solicitud.getCotizacionRound();
+        List<SolicitudInvitacion> invitacionesRound =
+            solicitudInvitacionRepository.findBySolicitud_IdAndRound(solicitud.getId(), round);
+        if (invitacionesRound == null || invitacionesRound.isEmpty()) {
+            return objetivoBase;
+        }
+        long disponibles = invitacionesRound.stream()
+            .filter(Objects::nonNull)
+            .filter(inv -> !inv.isRechazada())
+            .map(inv -> inv.getPrestador() != null ? inv.getPrestador().getId() : null)
+            .filter(Objects::nonNull)
+            .distinct()
+            .count();
+        if (disponibles <= 0) {
+            return objetivoBase;
+        }
+        return (int) Math.min(objetivoBase, disponibles);
     }
 
     public void cancelarPorId(Long solicitudId){
