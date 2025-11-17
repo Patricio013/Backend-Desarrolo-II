@@ -139,8 +139,7 @@
 					</goals>
 					<configuration>
 						<includes>
-							<include>com/example/demo/service/**/*</include>
-							<include>com/example/demo/controller/**/*</include>
+							<include>com/example/demo/**/*</include>
 						</includes>
 					</configuration>
 					</execution>
@@ -154,8 +153,7 @@
 								<rule>
 									<element>BUNDLE</element>
 									<includes>
-										<include>com/example/demo/service/**/*</include>
-										<include>com/example/demo/controller/**/*</include>
+										<include>com/example/demo/**/*</include>
 									</includes>
 									<limits>
 										<limit>
