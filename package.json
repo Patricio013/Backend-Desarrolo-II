@@ -1,0 +1,16 @@
+{
+  "devDependencies": {
+    "cypress": "^13.17.0",
+    "cypress-json-results": "^1.5.0",
+    "mocha-json-reporter": "^1.0.0-1",
+    "mochawesome": "^7.1.4",
+    "mochawesome-merge": "^5.0.0",
+    "mochawesome-report-generator": "^6.3.0",
+    "node-fetch": "^2.7.0",
+    "start-server-and-test": "^2.1.0"
+  },
+  "scripts": {
+    "cy:open": "src/test/java/com/example/demo/cypress open",
+    "cy:run": "src/test/java/com/example/demo/cypress run"
+  }
+}
