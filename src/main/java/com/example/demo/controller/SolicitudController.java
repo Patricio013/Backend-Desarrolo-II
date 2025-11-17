@@ -123,8 +123,12 @@ public class SolicitudController {
     @GetMapping("/{id}")
     public ResponseEntity<ModuleResponse<Solicitud>> obtenerDetalle(@PathVariable Long id) {
         log.info("Obteniendo detalle de solicitud {}", id);
-        Solicitud detalle = solicitudService.obtenerDetalle(id);
-        return ResponseEntity.ok(responseFactory.build("solicitudes", "solicitudDetalle", detalle));
+        try {
+            Solicitud detalle = solicitudService.obtenerDetalle(id);
+            return ResponseEntity.ok(responseFactory.build("solicitudes", "solicitudDetalle", detalle));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(responseFactory.build("solicitudes", "solicitudNoEncontrada", null));
+        }
     }
 
 

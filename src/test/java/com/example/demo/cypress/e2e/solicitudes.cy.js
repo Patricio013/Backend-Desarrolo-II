@@ -14,7 +14,7 @@ describe('API E2E - Solicitudes', () => {
     };
     cy.request({
       method: 'POST',
-      url: '/api/solicitudes', // Endpoint para crear una solicitud
+      url: '/api/solicitudes/crear', // Endpoint para crear una solicitud
       body: body,
       failOnStatusCode: false // Para que no falle si devuelve otro status
     }).then((response) => {
