@@ -1049,7 +1049,8 @@ public class WebhookTestController {
 
         String direccion = composeDireccion(payloadSection);
 
-        Long zonaId = extractFirstIdFromMixedList(root, "zones");
+        Map<String, Object> zonesSource = payloadSection != null ? payloadSection : root;
+        Long zonaId = extractFirstIdFromMixedList(zonesSource, "zones");
 
         java.util.List<Habilidad> habilidades = extractHabilidadesFlexible(payloadSection != null ? payloadSection : root);
 
@@ -1061,8 +1062,8 @@ public class WebhookTestController {
                 .direccion(direccion != null ? direccion : "")
                 .precioHora(0.0)
                 .zonaId(zonaId)
-                .zonaIds(extractLongListFlexible(root, "zones"))
-                .zonasDetalles(extractZonaDetalles(root, "zones"))
+                .zonaIds(extractLongListFlexible(zonesSource, "zones"))
+                .zonasDetalles(extractZonaDetalles(zonesSource, "zones"))
                 .habilidades(habilidades)
                 .direcciones(extractDireccionesDTO(payloadSection))
                 .build();

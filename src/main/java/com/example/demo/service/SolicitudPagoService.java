@@ -34,6 +34,15 @@ public class SolicitudPagoService {
             throw new IllegalArgumentException("Debe informarse solicitudId u ordenId");
         }
 
+        if (in.getSolicitudId() != null && in.getPrestadorId() != null && in.getCotizacionId() != null) {
+            var existenteOpt = repo.findTop1BySolicitudIdAndPrestadorIdAndCotizacionIdOrderByCreatedAtDesc(
+                    in.getSolicitudId(), in.getPrestadorId(), in.getCotizacionId()
+            );
+            if (existenteOpt.isPresent() && existenteOpt.get().getEstado() != EstadoSolicitudPago.ERROR) {
+                return toDTO(existenteOpt.get());
+            }
+        }
+
         // Map a entidad
         SolicitudPago sp = SolicitudPago.builder()
                 .solicitudId(in.getSolicitudId())
@@ -92,7 +101,6 @@ public class SolicitudPagoService {
                     java.math.BigDecimal.ZERO,
                     java.math.BigDecimal.ZERO,
                     "ARS",
-                    "MERCADO_PAGO",
                     sp.getConcepto(),
                     descripcionSolicitud
             );

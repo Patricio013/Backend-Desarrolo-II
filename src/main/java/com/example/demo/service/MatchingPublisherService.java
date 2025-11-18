@@ -238,7 +238,6 @@ public class MatchingPublisherService {
             BigDecimal impuestos,
             BigDecimal comisiones,
             String moneda,
-            String metodoPreferido,
             String descripcion,
             String descripcionSolicitud
     ) {
@@ -251,7 +250,6 @@ public class MatchingPublisherService {
         pago.put("impuestos", impuestos);
         pago.put("comisiones", comisiones);
         pago.put("moneda", moneda);
-        pago.put("metodoPreferido", metodoPreferido);
         if (descripcion != null && !descripcion.isBlank()) {
             pago.put("descripcion", descripcion);
         }

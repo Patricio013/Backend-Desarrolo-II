@@ -384,7 +384,6 @@ public class CotizacionService {
                     BigDecimal.ZERO,
                     BigDecimal.ZERO,
                     "ARS",
-                    "MERCADO_PAGO",
                     pagoDTO.getConcepto(),
                     solicitud.getDescripcion()
             );

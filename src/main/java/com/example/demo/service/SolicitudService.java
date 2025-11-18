@@ -156,6 +156,8 @@ public class SolicitudService {
         out.setFueCotizada(solicitud.isFueCotizada());
         out.setEsCritica(solicitud.isEsCritica());
         out.setTop3(invitaciones);
+
+        publicarResultados(List.of(out));
         return out;
     }
 
@@ -305,7 +307,9 @@ public class SolicitudService {
 
         SolicitudTop3Resultado out = new SolicitudTop3Resultado();
         out.setSolicitudId(solicitud.getId());
+        out.setUsuarioId(solicitud.getUsuarioId());
         out.setFecha(solicitud.getFecha());
+        out.setHorario(solicitud.getHorario());
         out.setDireccionProvincia(solicitud.getDireccionProvincia());
         out.setDireccionCiudad(solicitud.getDireccionCiudad());
         out.setDireccionCalle(solicitud.getDireccionCalle());
