@@ -519,6 +519,12 @@ public class SolicitudService {
         Solicitud solicitud = solicitudRepository.findByExternalId(solicitudId)
             .orElseThrow(() -> new IllegalArgumentException("Solicitud no encontrada: " + solicitudId));
 
+        // Si ya está cancelada (p.ej. desde búsquedas), no seguimos para evitar recotizar
+        if (solicitud.getEstado() == EstadoSolicitud.CANCELADA) {
+            log.info("Solicitud {} ya cancelada; se omite rechazo de prestador {}", solicitudId, prestadorId);
+            return;
+        }
+
         var invitacionOpt = solicitudInvitacionRepository
             .findFirstBySolicitud_IdAndPrestador_IdOrderByRoundDesc(solicitud.getId(), prestadorId);
 

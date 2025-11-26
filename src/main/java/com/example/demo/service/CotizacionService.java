@@ -373,24 +373,6 @@ public class CotizacionService {
 
         SolicitudPagoDTO pagoDTO = solicitudPagoService.crearYEnviar(pagoIn);
 
-        try {
-            String idCorrelacion = "PED-" + (pagoDTO.getId() != null ? pagoDTO.getId() : "");
-            matchingPublisherService.publishSolicitudPagoEmitida(
-                    idCorrelacion,
-                    solicitud.getUsuarioId(),
-                    prestador.getId(),
-                    solicitud.getId(),
-                    pagoDTO.getMonto(),
-                    BigDecimal.ZERO,
-                    BigDecimal.ZERO,
-                    "ARS",
-                    pagoDTO.getConcepto(),
-                    solicitud.getDescripcion()
-            );
-        } catch (Exception e) {
-            log.warn("No se pudo publicar evento Pago Emitida: {}", e.toString());
-        }
-
         // WS: notificar aceptación y cambio de estado a ASIGNADA luego del commit
         final Long solicitudIdFinal   = solicitud.getId();
         final Long prestadorIdFinal   = prestador.getId();
