@@ -157,7 +157,37 @@ public class MatchingPublisherService {
         out.put("rubroId", invitacion.getRubroId());
         out.put("cotizacionId", invitacion.getCotizacionId());
         out.put("solicitudId", invitacion.getSolicitudId());
+        out.put("usuarioId", invitacion.getUsuarioId());
+        out.put("fecha", invitacion.getFecha() != null ? invitacion.getFecha().toString() : null);
+        out.put("horario", invitacion.getHorario() != null ? invitacion.getHorario().toString() : null);
+        Map<String, Object> direccion = buildDireccion(invitacion);
+        if (direccion != null) {
+            out.put("direccion", direccion);
+        }
         return out;
+    }
+
+    private Map<String, Object> buildDireccion(InvitacionCotizacionDTO invitacion) {
+        boolean hasData =
+            invitacion.getDireccionProvincia() != null ||
+            invitacion.getDireccionCiudad() != null ||
+            invitacion.getDireccionCalle() != null ||
+            invitacion.getDireccionNumero() != null ||
+            invitacion.getDireccionPiso() != null ||
+            invitacion.getDireccionDepto() != null ||
+            invitacion.getDireccionCodigoPostal() != null;
+        if (!hasData) {
+            return null;
+        }
+        Map<String, Object> direccion = new LinkedHashMap<>();
+        direccion.put("provincia", invitacion.getDireccionProvincia());
+        direccion.put("ciudad", invitacion.getDireccionCiudad());
+        direccion.put("calle", invitacion.getDireccionCalle());
+        direccion.put("numero", invitacion.getDireccionNumero());
+        direccion.put("piso", invitacion.getDireccionPiso());
+        direccion.put("depto", invitacion.getDireccionDepto());
+        direccion.put("codigoPostal", invitacion.getDireccionCodigoPostal());
+        return direccion;
     }
 
     private PublishMessage buildCotizacionesMessage(Solicitud solicitud,
