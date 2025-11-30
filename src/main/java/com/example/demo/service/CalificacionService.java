@@ -49,11 +49,11 @@ public class CalificacionService {
     int trabajos = p.getTrabajosFinalizados() == null ? 0 : p.getTrabajosFinalizados();
     int propuestas = limpias.size();
 
-    if (actuales + propuestas > trabajos) {
-      throw new ResponseStatusException(
-          HttpStatus.BAD_REQUEST,
-          "No se pueden agregar " + propuestas + " calificaciones: ya tiene " + actuales +
-              " y solo " + trabajos + " trabajos finalizados");
+    // Ajustamos trabajos finalizados para permitir ingresar la calificación entrante
+    int requeridos = actuales + propuestas;
+    if (trabajos < requeridos) {
+      trabajos = requeridos;
+      p.setTrabajosFinalizados(trabajos);
     }
 
     p.getCalificacion().addAll(limpias);
