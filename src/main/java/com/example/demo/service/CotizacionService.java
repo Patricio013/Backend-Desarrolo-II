@@ -213,6 +213,11 @@ public class CotizacionService {
         if (solicitud == null) {
             return;
         }
+        if (solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.ASIGNADA
+                || solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.COMPLETADA) {
+            log.debug("Omito publish por objetivo reducido: solicitud {} en estado {}", solicitud.getId(), solicitud.getEstado());
+            return;
+        }
         if (solicitud.isEsCritica()) {
             return; // críticas requieren siempre el objetivo completo original
         }
@@ -247,6 +252,12 @@ public class CotizacionService {
                                        List<Cotizacion> cotizacionesSolicitud,
                                        int objetivoCotizaciones,
                                        boolean publicarEnMatching) {
+        // No volver a publicar snapshots si ya está asignada/completada
+        if (solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.ASIGNADA
+                || solicitud.getEstado() == com.example.demo.entity.enums.EstadoSolicitud.COMPLETADA) {
+            log.debug("Omito publish de cotizaciones: solicitud {} en estado {}", solicitud.getId(), solicitud.getEstado());
+            return;
+        }
         final int totalCotizaciones = cotizacionesSolicitud.size();
 
         // (1) Enviar al Core cada cotización disponible
