@@ -719,21 +719,29 @@ public class SolicitudService {
             : excluirPrestadores.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
-        PageRequest page = PageRequest.of(0, CANDIDATE_BATCH_SIZE);
-
         Long habilidadId = solicitud.getHabilidadId();
         Long solicitudExternalId = solicitud.getId();
 
         if (habilidadId != null) {
-            List<Prestador> porHabilidad = excluirCotizados && solicitudExternalId != null
-                ? prestadorRepository.findTopByHabilidadExcluyendoLosQueCotizaron(habilidadId, solicitudExternalId, page)
-                : prestadorRepository.findTopByHabilidadRanked(habilidadId, page);
-            agregarCandidatos(seleccion, seleccionados, porHabilidad, solicitud, maxInicial, excluidos);
+            int pageIndex = 0;
+            boolean hayMas = true;
+            while (seleccion.size() < maxInicial && hayMas) {
+                PageRequest page = PageRequest.of(pageIndex++, CANDIDATE_BATCH_SIZE);
+                List<Prestador> porHabilidad = excluirCotizados && solicitudExternalId != null
+                    ? prestadorRepository.findTopByHabilidadExcluyendoLosQueCotizaron(habilidadId, solicitudExternalId, page)
+                    : prestadorRepository.findTopByHabilidadRanked(habilidadId, page);
+                if (porHabilidad.isEmpty()) {
+                    break;
+                }
+                agregarCandidatos(seleccion, seleccionados, porHabilidad, solicitud, maxInicial, excluidos);
+                hayMas = porHabilidad.size() == CANDIDATE_BATCH_SIZE;
+            }
         }
 
         if (seleccion.size() < maxInicial) {
             Long rubroFallback = (rubroId != null) ? rubroId : resolveRubroId(solicitud);
             if (rubroFallback != null) {
+                PageRequest page = PageRequest.of(0, CANDIDATE_BATCH_SIZE);
                 List<Prestador> porRubro = excluirCotizados && solicitudExternalId != null
                     ? prestadorRepository.findTopByRubroExcluyendoLosQueCotizaron(rubroFallback, solicitudExternalId, page)
                     : prestadorRepository.findTopByRubroRanked(rubroFallback, page);
