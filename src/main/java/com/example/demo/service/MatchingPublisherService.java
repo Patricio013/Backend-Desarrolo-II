@@ -104,8 +104,10 @@ public class MatchingPublisherService {
         out.put("solicitudId", resultado.getSolicitudId());
         out.put("descripcion", resultado.getDescripcion());
         out.put("usuarioId", resultado.getUsuarioId());
-        out.put("fecha", resultado.getFecha());
-        out.put("horario", resultado.getHorario());
+        // Compatibilidad: algunos consumidores esperan snake_case
+        out.put("usuario_id", resultado.getUsuarioId());
+        out.put("fecha", resultado.getFecha() != null ? resultado.getFecha().toString() : null);
+        out.put("horario", resultado.getHorario() != null ? resultado.getHorario().toString() : null);
         out.put("estado", resultado.getEstado());
         out.put("fueCotizada", resultado.getFueCotizada());
         out.put("esCritica", resultado.getEsCritica());
@@ -179,6 +181,10 @@ public class MatchingPublisherService {
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("solicitudId", solicitud.getId());
         out.put("estado", solicitud.getEstado());
+        out.put("usuarioId", solicitud.getUsuarioId());
+        out.put("usuario_id", solicitud.getUsuarioId());
+        out.put("fecha", solicitud.getFecha());
+        out.put("horario", solicitud.getHorario());
         out.put("esCritica", solicitud.isEsCritica());
         out.put("prestadorAsignadoId", solicitud.getPrestadorAsignadoId());
         out.put("objetivoCotizaciones", objetivoCotizaciones);

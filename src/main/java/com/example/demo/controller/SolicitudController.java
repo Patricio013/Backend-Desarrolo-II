@@ -14,6 +14,7 @@ import com.example.demo.dto.SolicitudesCreadasDTO;
 import com.example.demo.entity.Solicitud;
 import com.example.demo.dto.SolicitudAsignarDTO;
 import com.example.demo.dto.SolicitudPagoDTO;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -73,6 +74,8 @@ public class SolicitudController {
         public void setSolicitudId(Long solicitudId) { this.solicitudId = solicitudId; }
         public Long getUsuarioId() { return usuarioId; }
         public void setUsuarioId(Long usuarioId) { this.usuarioId = usuarioId; }
+        @JsonProperty("usuario_id")
+        public Long getUsuarioIdSnakeCase() { return usuarioId; }
         public java.time.LocalDate getFecha() { return fecha; }
         public void setFecha(java.time.LocalDate fecha) { this.fecha = fecha; }
         public java.time.LocalTime getHorario() { return horario; }
